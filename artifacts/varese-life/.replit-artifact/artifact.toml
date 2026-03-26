@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Varese Life"
+version = "1.0.0"
+id = "artifacts/varese-life"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25055
+
+[services.development]
+run = "pnpm --filter @workspace/varese-life run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/varese-life", "run", "build" ]
+publicDir = "artifacts/varese-life/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25055"
+BASE_PATH = "/"

@@ -1,96 +1,98 @@
-# Workspace
+# Varese Life — Admin Newsletter App
 
-## Overview
+## Panoramica del progetto
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+**Varese Life** è un'applicazione full-stack per la gestione amministrativa della newsletter locale di Varese. Tutta l'interfaccia utente è in italiano.
+
+### Funzionalità principali
+- **Scraping eventi**: Pipeline con BrowserAct (primario) + Claude fetch+crawl (fallback automatico)
+- **AI rewrite**: Riscrittura automatica degli eventi con Claude (claude-opus-4-5)
+- **Composizione newsletter**: Editor con 4 sezioni HTML per Beehiiv
+- **Template manager**: Template email-safe con variabili inline style
+- **Gestione utenti**: Ruoli superadmin / admin / editor
+- **Prompt manager**: Prompt AI configurabili con storico versioni
+- **Impostazioni**: Cron job, categorie, giorno di pubblicazione, BrowserAct workflow ID
+- **Log errori**: Tracciamento eventi non importabili (date non parsabili, duplicati)
 
 ## Stack
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
+- **Monorepo**: pnpm workspaces
+- **Node.js**: 24, **TypeScript**: 5.9
+- **Backend**: Express 5 + express-session + connect-pg-simple (sessioni 30 giorni rolling)
 - **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **AI**: @anthropic-ai/sdk — modello `claude-opus-4-5`
+- **Scraper primario**: BrowserAct API (`BROWSERACT_API_KEY`)
+- **Codegen**: Orval (OpenAPI → React Query hooks + Zod schemas)
+- **Frontend**: React + Vite + TailwindCSS + shadcn/ui + wouter + TanStack Query
+- **Build**: esbuild (backend), Vite (frontend)
 
-## Structure
+## Struttura
 
 ```text
-artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+├── artifacts/
+│   ├── api-server/          # Express API server (porta $PORT)
+│   └── varese-life/         # React frontend (porta $PORT)
+├── lib/
+│   ├── api-spec/            # OpenAPI spec + Orval config
+│   ├── api-client-react/    # React Query hooks generati
+│   ├── api-zod/             # Zod schemas generati
+│   └── db/                  # Drizzle schema + connessione DB
+└── scripts/
+    └── src/seed.ts          # Seed: admin user, 6 prompt, settings, template default
 ```
 
-## TypeScript & Composite Projects
+## Schema DB (tabelle principali)
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+- `users` — superadmin/admin/editor, bcrypt password
+- `sources` — fonti notizie (siti web)
+- `source_urls` — URL individuali per fonte
+- `events` — eventi estratti con status: pending/approved/rejected
+- `prompts` — prompt AI con versioning
+- `newsletters` — newsletter componibili
+- `newsletter_events` — join table newsletter ↔ eventi
+- `templates` — template HTML email-safe
+- `settings` — configurazioni app (JSON value)
+- `error_logs` — log errori scraping/parsing
+- `session` — sessioni express (connect-pg-simple)
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+## Route API (`/api/...`)
 
-## Root Scripts
+| Gruppo | Prefix |
+|--------|--------|
+| Auth | `/api/auth/login`, `/api/auth/logout`, `/api/auth/me` |
+| Fonti | `/api/sources` (CRUD + scrape) |
+| BrowserAct webhook | `/api/browseract/webhook` |
+| Eventi | `/api/events` (CRUD + bulk update + rewrite + extract) |
+| Prompt | `/api/prompts` (CRUD + reset) |
+| Newsletter | `/api/newsletters` (CRUD + events + export + generate-intro) |
+| Template | `/api/templates` (CRUD) |
+| Utenti | `/api/users` (CRUD, solo superadmin) |
+| Impostazioni | `/api/settings` (GET/PUT) |
+| Dashboard | `/api/dashboard/stats` |
+| Error logs | `/api/error-logs` (GET + resolve) |
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+## Workflow di esecuzione
 
-## Packages
+- **API server**: `pnpm --filter @workspace/api-server run dev` (build + start)
+- **Frontend**: `pnpm --filter @workspace/varese-life run dev`
+- **Seed DB**: `pnpm --filter @workspace/scripts run seed`
+- **Push schema**: `pnpm --filter @workspace/db run push`
+- **Codegen**: `pnpm --filter @workspace/api-spec run codegen`
 
-### `artifacts/api-server` (`@workspace/api-server`)
+## Variabili d'ambiente richieste
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+- `DATABASE_URL` — PostgreSQL connection string (Replit fornisce automaticamente)
+- `SESSION_SECRET` — secret per express-session
+- `ANTHROPIC_API_KEY` — chiave API Anthropic Claude
+- `BROWSERACT_API_KEY` — chiave API BrowserAct
+- `ADMIN_EMAIL` — email admin per seed
+- `ADMIN_PASSWORD` — password admin per seed
 
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
+## Note importanti
 
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+- Encoding **UTF-8** ovunque; caratteri accentati italiani come literal UTF-8
+- Date con formato italiano esteso (es. "sabato 15 marzo 2026, ore 21:00")
+- Export HTML: email-safe, inline styles, max-width 600px, no immagini
+- BrowserAct è primario; Claude fetch+crawl è fallback automatico
+- Sessione cookie: 30 giorni rolling, `httpOnly: true`, `sameSite: lax`
+- `re-export` di `useToast` in `src/components/ui/use-toast.ts` per compatibilità import

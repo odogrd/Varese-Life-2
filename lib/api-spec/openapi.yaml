@@ -1,22 +1,30 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Varese Life API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: auth
+  - name: sources
+  - name: events
+  - name: prompts
+  - name: newsletters
+  - name: templates
+  - name: users
+  - name: settings
+  - name: dashboard
+  - name: errorLogs
+  - name: browseract
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +32,1036 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # AUTH
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # SOURCES
+  /sources:
+    get:
+      operationId: listSources
+      tags: [sources]
+      summary: List all sources
+      responses:
+        "200":
+          description: Sources list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SourceWithUrls"
+    post:
+      operationId: createSource
+      tags: [sources]
+      summary: Create source
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSourceRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceWithUrls"
+  /sources/{id}:
+    get:
+      operationId: getSource
+      tags: [sources]
+      summary: Get source by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceWithUrls"
+    put:
+      operationId: updateSource
+      tags: [sources]
+      summary: Update source
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSourceRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceWithUrls"
+    delete:
+      operationId: deleteSource
+      tags: [sources]
+      summary: Delete source
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /sources/{id}/scrape:
+    post:
+      operationId: scrapeSource
+      tags: [sources]
+      summary: Trigger scrape for a source
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Scrape triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrapeResponse"
+  /sources/{id}/import:
+    post:
+      operationId: importEvents
+      tags: [sources]
+      summary: Import events directly (webhook / n8n / Make)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportEventsRequest"
+      responses:
+        "200":
+          description: Events imported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /sources/scrape-all:
+    post:
+      operationId: scrapeAll
+      tags: [sources]
+      summary: Trigger scrape for all active sources
+      responses:
+        "200":
+          description: Scrape triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrapeResponse"
+
+  # BROWSERACT WEBHOOK
+  /browseract/webhook/{sourceId}/{sourceUrlId}:
+    post:
+      operationId: browseractWebhook
+      tags: [browseract]
+      summary: BrowserAct webhook receiver
+      parameters:
+        - name: sourceId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: sourceUrlId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /browseract/task/{taskId}/status:
+    get:
+      operationId: getBrowseractTaskStatus
+      tags: [browseract]
+      summary: Get BrowserAct task status (polling fallback)
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskStatusResponse"
+
+  # EVENTS
+  /events:
+    get:
+      operationId: listEvents
+      tags: [events]
+      summary: List events with filters
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: sourceId
+          in: query
+          schema:
+            type: integer
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Events list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventsListResponse"
+    post:
+      operationId: createEvent
+      tags: [events]
+      summary: Create event manually
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEventRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+  /events/{id}:
+    get:
+      operationId: getEvent
+      tags: [events]
+      summary: Get event by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+    put:
+      operationId: updateEvent
+      tags: [events]
+      summary: Update event
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEventRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+    delete:
+      operationId: deleteEvent
+      tags: [events]
+      summary: Delete event
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /events/{id}/rewrite:
+    post:
+      operationId: rewriteEvent
+      tags: [events]
+      summary: Rewrite event description with AI
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Rewritten
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+  /events/{id}/rescrape:
+    post:
+      operationId: rescrapeEvent
+      tags: [events]
+      summary: Re-scrape event from source URL
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Rescrape triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrapeResponse"
+  /events/bulk:
+    post:
+      operationId: bulkUpdateEvents
+      tags: [events]
+      summary: Bulk update event statuses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkUpdateEventsRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /events/extract-screenshot:
+    post:
+      operationId: extractFromScreenshot
+      tags: [events]
+      summary: Extract event from screenshot images
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtractScreenshotRequest"
+      responses:
+        "200":
+          description: Extracted fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractedEventFields"
+  /events/extract-text:
+    post:
+      operationId: extractFromText
+      tags: [events]
+      summary: Extract event from free text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtractTextRequest"
+      responses:
+        "200":
+          description: Extracted fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractedEventFields"
+  /events/extract-url:
+    post:
+      operationId: extractFromUrl
+      tags: [events]
+      summary: Extract event from URL (BrowserAct or Claude fallback)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtractUrlRequest"
+      responses:
+        "200":
+          description: Extracted fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractedEventFields"
+
+  # PROMPTS
+  /prompts:
+    get:
+      operationId: listPrompts
+      tags: [prompts]
+      summary: List all prompts
+      responses:
+        "200":
+          description: Prompts list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Prompt"
+  /prompts/{id}:
+    get:
+      operationId: getPrompt
+      tags: [prompts]
+      summary: Get prompt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Prompt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prompt"
+    put:
+      operationId: updatePrompt
+      tags: [prompts]
+      summary: Update prompt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePromptRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prompt"
+  /prompts/{id}/reset:
+    post:
+      operationId: resetPrompt
+      tags: [prompts]
+      summary: Reset prompt to default
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prompt"
+
+  # NEWSLETTERS
+  /newsletters:
+    get:
+      operationId: listNewsletters
+      tags: [newsletters]
+      summary: List newsletters
+      responses:
+        "200":
+          description: Newsletters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Newsletter"
+    post:
+      operationId: createNewsletter
+      tags: [newsletters]
+      summary: Create newsletter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNewsletterRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Newsletter"
+  /newsletters/{id}:
+    get:
+      operationId: getNewsletter
+      tags: [newsletters]
+      summary: Get newsletter
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Newsletter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterWithEvents"
+    put:
+      operationId: updateNewsletter
+      tags: [newsletters]
+      summary: Update newsletter
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNewsletterRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Newsletter"
+    delete:
+      operationId: deleteNewsletter
+      tags: [newsletters]
+      summary: Delete newsletter
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /newsletters/{id}/events:
+    put:
+      operationId: updateNewsletterEvents
+      tags: [newsletters]
+      summary: Update newsletter event list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNewsletterEventsRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /newsletters/{id}/export:
+    get:
+      operationId: exportNewsletter
+      tags: [newsletters]
+      summary: Export newsletter HTML sections
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: HTML sections
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterExport"
+  /newsletters/{id}/generate-intro:
+    post:
+      operationId: generateNewsletterIntro
+      tags: [newsletters]
+      summary: Generate newsletter intro with AI
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Generated intro
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedIntroResponse"
+
+  # TEMPLATES
+  /templates:
+    get:
+      operationId: listTemplates
+      tags: [templates]
+      summary: List templates
+      responses:
+        "200":
+          description: Templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Template"
+    post:
+      operationId: createTemplate
+      tags: [templates]
+      summary: Create template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTemplateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+  /templates/{id}:
+    get:
+      operationId: getTemplate
+      tags: [templates]
+      summary: Get template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+    put:
+      operationId: updateTemplate
+      tags: [templates]
+      summary: Update template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTemplateRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+    delete:
+      operationId: deleteTemplate
+      tags: [templates]
+      summary: Delete template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /templates/{id}/set-default:
+    post:
+      operationId: setDefaultTemplate
+      tags: [templates]
+      summary: Set template as default
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Set as default
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # USERS
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List users
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /users/{id}:
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # SETTINGS
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    put:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSettingsRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+  /settings/reset-prompts:
+    post:
+      operationId: resetAllPrompts
+      tags: [settings]
+      summary: Reset all prompts to defaults
+      responses:
+        "200":
+          description: Reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /settings/change-password:
+    post:
+      operationId: changePassword
+      tags: [settings]
+      summary: Change admin password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # DASHBOARD
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get dashboard statistics
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  # ERROR LOGS
+  /error-logs:
+    get:
+      operationId: listErrorLogs
+      tags: [errorLogs]
+      summary: List error logs
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: sourceId
+          in: query
+          schema:
+            type: integer
+        - name: resolved
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Error logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorLogsListResponse"
+  /error-logs/{id}/resolve:
+    post:
+      operationId: resolveErrorLog
+      tags: [errorLogs]
+      summary: Mark error log as resolved
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /error-logs/unresolved-count:
+    get:
+      operationId: getUnresolvedErrorCount
+      tags: [errorLogs]
+      summary: Get count of unresolved errors
+      responses:
+        "200":
+          description: Count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnresolvedCountResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +1069,833 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required: [email, password]
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        role:
+          type: string
+        isSuperadmin:
+          type: boolean
+      required: [id, email, role, isSuperadmin]
+
+    SourceUrl:
+      type: object
+      properties:
+        id:
+          type: integer
+        sourceId:
+          type: integer
+        url:
+          type: string
+        label:
+          type: string
+          nullable: true
+        browseractWorkflowId:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+      required: [id, sourceId, url, active]
+
+    Source:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        browseractWorkflowId:
+          type: string
+          nullable: true
+        promptOverride:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        lastScrapedAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        preferredScraper:
+          type: string
+      required: [id, name, active, createdAt, preferredScraper]
+
+    SourceWithUrls:
+      allOf:
+        - $ref: "#/components/schemas/Source"
+        - type: object
+          properties:
+            urls:
+              type: array
+              items:
+                $ref: "#/components/schemas/SourceUrl"
+          required: [urls]
+
+    CreateSourceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        browseractWorkflowId:
+          type: string
+          nullable: true
+        promptOverride:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        preferredScraper:
+          type: string
+        urls:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateSourceUrlRequest"
+      required: [name, urls]
+
+    CreateSourceUrlRequest:
+      type: object
+      properties:
+        url:
+          type: string
+        label:
+          type: string
+          nullable: true
+        browseractWorkflowId:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+      required: [url]
+
+    UpdateSourceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        browseractWorkflowId:
+          type: string
+          nullable: true
+        promptOverride:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        preferredScraper:
+          type: string
+        urls:
+          type: array
+          items:
+            $ref: "#/components/schemas/UpdateSourceUrlRequest"
+
+    UpdateSourceUrlRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+          nullable: true
+        url:
+          type: string
+        label:
+          type: string
+          nullable: true
+        browseractWorkflowId:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+
+    ScrapeResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        taskIds:
+          type: array
+          items:
+            type: string
+      required: [message]
+
+    ImportEventsRequest:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            type: object
+      required: [events]
+
+    TaskStatusResponse:
+      type: object
+      properties:
+        taskId:
+          type: string
+        status:
+          type: string
+        result:
+          type: object
+          nullable: true
+      required: [taskId, status]
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: integer
+        sourceId:
+          type: integer
+          nullable: true
+        title:
+          type: string
+        dateStart:
+          type: string
+          nullable: true
+        dateEnd:
+          type: string
+          nullable: true
+        dateDisplay:
+          type: string
+          nullable: true
+        dateParseConfidence:
+          type: string
+        recurring:
+          type: boolean
+        location:
+          type: string
+          nullable: true
+        descriptionRaw:
+          type: string
+          nullable: true
+        descriptionClean:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        sourceUrl:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        price:
+          type: string
+          nullable: true
+        status:
+          type: string
+        includedInNewsletter:
+          type: boolean
+        sourceType:
+          type: string
+        scraper:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        sourceName:
+          type: string
+          nullable: true
+      required: [id, title, dateParseConfidence, recurring, status, includedInNewsletter, sourceType, createdAt]
+
+    EventsListResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/Event"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [events, total, page, limit]
+
+    CreateEventRequest:
+      type: object
+      properties:
+        sourceId:
+          type: integer
+          nullable: true
+        title:
+          type: string
+        dateStart:
+          type: string
+          nullable: true
+        dateEnd:
+          type: string
+          nullable: true
+        dateDisplay:
+          type: string
+          nullable: true
+        dateParseConfidence:
+          type: string
+        recurring:
+          type: boolean
+        location:
+          type: string
+          nullable: true
+        descriptionRaw:
+          type: string
+          nullable: true
+        descriptionClean:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        sourceUrl:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        price:
+          type: string
+          nullable: true
+        status:
+          type: string
+        sourceType:
+          type: string
+      required: [title]
+
+    UpdateEventRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        dateStart:
+          type: string
+          nullable: true
+        dateEnd:
+          type: string
+          nullable: true
+        dateDisplay:
+          type: string
+          nullable: true
+        dateParseConfidence:
+          type: string
+        recurring:
+          type: boolean
+        location:
+          type: string
+          nullable: true
+        descriptionRaw:
+          type: string
+          nullable: true
+        descriptionClean:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        sourceUrl:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        price:
+          type: string
+          nullable: true
+        status:
+          type: string
+        includedInNewsletter:
+          type: boolean
+
+    BulkUpdateEventsRequest:
+      type: object
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+        action:
+          type: string
+      required: [ids, action]
+
+    ExtractScreenshotRequest:
+      type: object
+      properties:
+        images:
+          type: array
+          items:
+            type: string
+        sourceUrl:
+          type: string
+          nullable: true
+      required: [images]
+
+    ExtractTextRequest:
+      type: object
+      properties:
+        text:
+          type: string
+        sourceUrl:
+          type: string
+          nullable: true
+      required: [text]
+
+    ExtractUrlRequest:
+      type: object
+      properties:
+        url:
+          type: string
+      required: [url]
+
+    ExtractedEventFields:
+      type: object
+      properties:
+        title:
+          type: string
+          nullable: true
+        dateStart:
+          type: string
+          nullable: true
+        dateEnd:
+          type: string
+          nullable: true
+        dateDisplay:
+          type: string
+          nullable: true
+        dateParseConfidence:
+          type: string
+        recurring:
+          type: boolean
+        location:
+          type: string
+          nullable: true
+        descriptionRaw:
+          type: string
+          nullable: true
+        descriptionClean:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        sourceUrl:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        price:
+          type: string
+          nullable: true
+      required: [dateParseConfidence, recurring]
+
+    Prompt:
+      type: object
+      properties:
+        id:
+          type: integer
+        key:
+          type: string
+        label:
+          type: string
+        content:
+          type: string
+        description:
+          type: string
+        defaultContent:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, key, label, content, description, defaultContent, updatedAt]
+
+    UpdatePromptRequest:
+      type: object
+      properties:
+        label:
+          type: string
+        content:
+          type: string
+        description:
+          type: string
+
+    Newsletter:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        introHtml:
+          type: string
+          nullable: true
+        eventsHtml:
+          type: string
+          nullable: true
+        footerHtml:
+          type: string
+          nullable: true
+        templateId:
+          type: integer
+          nullable: true
+        dateFrom:
+          type: string
+          nullable: true
+        dateTo:
+          type: string
+          nullable: true
+        status:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, title, status, createdAt, updatedAt]
+
+    NewsletterWithEvents:
+      allOf:
+        - $ref: "#/components/schemas/Newsletter"
+        - type: object
+          properties:
+            events:
+              type: array
+              items:
+                $ref: "#/components/schemas/Event"
+          required: [events]
+
+    CreateNewsletterRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        templateId:
+          type: integer
+          nullable: true
+        dateFrom:
+          type: string
+          nullable: true
+        dateTo:
+          type: string
+          nullable: true
+      required: [title]
+
+    UpdateNewsletterRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        introHtml:
+          type: string
+          nullable: true
+        eventsHtml:
+          type: string
+          nullable: true
+        footerHtml:
+          type: string
+          nullable: true
+        templateId:
+          type: integer
+          nullable: true
+        dateFrom:
+          type: string
+          nullable: true
+        dateTo:
+          type: string
+          nullable: true
+        status:
+          type: string
+
+    UpdateNewsletterEventsRequest:
+      type: object
+      properties:
+        eventIds:
+          type: array
+          items:
+            type: integer
+      required: [eventIds]
+
+    NewsletterExport:
+      type: object
+      properties:
+        title:
+          type: string
+        introHtml:
+          type: string
+        eventsHtml:
+          type: string
+        footerHtml:
+          type: string
+      required: [title, introHtml, eventsHtml, footerHtml]
+
+    GeneratedIntroResponse:
+      type: object
+      properties:
+        introHtml:
+          type: string
+      required: [introHtml]
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        introHtml:
+          type: string
+          nullable: true
+        eventsHtml:
+          type: string
+          nullable: true
+        footerHtml:
+          type: string
+          nullable: true
+        isDefault:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, name, isDefault, createdAt]
+
+    CreateTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        introHtml:
+          type: string
+          nullable: true
+        eventsHtml:
+          type: string
+          nullable: true
+        footerHtml:
+          type: string
+          nullable: true
+      required: [name]
+
+    UpdateTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        introHtml:
+          type: string
+          nullable: true
+        eventsHtml:
+          type: string
+          nullable: true
+        footerHtml:
+          type: string
+          nullable: true
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        role:
+          type: string
+        isSuperadmin:
+          type: boolean
+        active:
+          type: boolean
+        lastLoginAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, email, role, isSuperadmin, active, createdAt]
+
+    CreateUserRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+      required: [email, password, role]
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        role:
+          type: string
+        active:
+          type: boolean
+
+    Settings:
+      type: object
+      properties:
+        publicationDay:
+          type: integer
+        categories:
+          type: array
+          items:
+            type: string
+        cronExpression:
+          type: string
+        cronEnabled:
+          type: boolean
+        browseractSinglePageWorkflowId:
+          type: string
+          nullable: true
+        appBaseUrl:
+          type: string
+          nullable: true
+      required: [publicationDay, categories, cronExpression, cronEnabled]
+
+    UpdateSettingsRequest:
+      type: object
+      properties:
+        publicationDay:
+          type: integer
+        categories:
+          type: array
+          items:
+            type: string
+        cronExpression:
+          type: string
+        cronEnabled:
+          type: boolean
+        browseractSinglePageWorkflowId:
+          type: string
+          nullable: true
+        appBaseUrl:
+          type: string
+          nullable: true
+        anthropicApiKey:
+          type: string
+          nullable: true
+        browseractApiKey:
+          type: string
+          nullable: true
+
+    ChangePasswordRequest:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+      required: [currentPassword, newPassword]
+
+    DashboardStats:
+      type: object
+      properties:
+        eventsLast7Days:
+          type: integer
+        eventsPending:
+          type: integer
+        eventsApproved:
+          type: integer
+        newslettersSentThisMonth:
+          type: integer
+        activeSources:
+          type: integer
+        sourcesLastScrape:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceLastScrape"
+        unresolvedErrors:
+          type: integer
+      required: [eventsLast7Days, eventsPending, eventsApproved, newslettersSentThisMonth, activeSources, sourcesLastScrape, unresolvedErrors]
+
+    SourceLastScrape:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        lastScrapedAt:
+          type: string
+          nullable: true
+      required: [id, name]
+
+    ErrorLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        errorType:
+          type: string
+        sourceId:
+          type: integer
+          nullable: true
+        sourceName:
+          type: string
+          nullable: true
+        eventId:
+          type: integer
+          nullable: true
+        message:
+          type: string
+        context:
+          type: object
+          nullable: true
+        resolved:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, errorType, message, resolved, createdAt]
+
+    ErrorLogsListResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ErrorLog"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [logs, total, page, limit]
+
+    UnresolvedCountResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+      required: [count]

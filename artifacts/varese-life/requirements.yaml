@@ -1,0 +1,20 @@
+packages:
+  "framer-motion": "For smooth layout transitions and polish"
+  "date-fns": "For formatting dates in Italian"
+  "date-fns/locale": "Italian locale for date-fns"
+  "recharts": "For dashboard charts"
+  "@hookform/resolvers": "Zod validation for forms"
+  "react-hook-form": "Form state management"
+  "zod": "Schema validation for forms"
+
+images:
+  - path: "artifacts/varese-life/public/images/logo-icon.png"
+    description: "A minimal, elegant, modern icon logo for a brand called 'Varese Life'. Features a subtle abstraction of a green leaf and a sun, rendered in flat vector style on a transparent background. Professional, clean."
+    aspect_ratio: "1:1"
+  - path: "artifacts/varese-life/public/images/login-bg.png"
+    description: "A beautiful, subtle abstract gradient mesh background in very light grey and soft mint green, professional and clean, out of focus."
+    aspect_ratio: "16:9"
+
+notes:
+  - Using generated orval hooks from @workspace/api-client-react directly.
+  - Relying on shadcn/ui components assumed to be present in src/components/ui/ based on the context.
