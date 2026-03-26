@@ -1,13 +1,23 @@
+import { useState } from "react";
 import { AppLayout } from "@/components/layout";
-import { useListTemplates } from "@workspace/api-client-react";
+import { useListTemplates, useCreateTemplate } from "@workspace/api-client-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, LayoutTemplate, Star } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, LayoutTemplate, Star, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
+import { useQueryClient } from "@tanstack/react-query";
+import { getListTemplatesQueryKey } from "@workspace/api-client-react";
+import { useLocation } from "wouter";
 
 export default function Templates() {
   const { data: templates, isLoading } = useListTemplates();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [, navigate] = useLocation();
 
   return (
     <AppLayout>
@@ -16,11 +26,13 @@ export default function Templates() {
           <h1 className="text-3xl font-bold font-display text-foreground tracking-tight">Template HTML</h1>
           <p className="text-muted-foreground mt-1">Gestisci la struttura visiva esportata per Beehiiv.</p>
         </div>
-        <Button className="shadow-md">
+        <Button className="shadow-md" onClick={() => setIsModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Nuovo Template
         </Button>
       </div>
+
+      <TemplateModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoading ? (
@@ -39,8 +51,18 @@ export default function Templates() {
                 </div>
                 <CardTitle className="text-lg">{t.name}</CardTitle>
                 <CardDescription className="line-clamp-2">{t.description || "Nessuna descrizione"}</CardDescription>
-                <div className="text-xs text-muted-foreground mt-4">
-                  Creato il {format(new Date(t.createdAt), 'dd MMMM yyyy', { locale: it })}
+                <div className="flex items-center justify-between mt-4">
+                  <div className="text-xs text-muted-foreground">
+                    Creato il {format(new Date(t.createdAt), 'dd MMMM yyyy', { locale: it })}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-primary gap-1.5 -mr-2"
+                    onClick={() => navigate(`/template/${t.id}`)}
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Modifica
+                  </Button>
                 </div>
               </CardHeader>
             </Card>
@@ -48,5 +70,62 @@ export default function Templates() {
         )}
       </div>
     </AppLayout>
+  );
+}
+
+function TemplateModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState({ name: "", description: "", introHtml: "", eventsHtml: "", footerHtml: "" });
+  const { mutate: createTemplate, isPending } = useCreateTemplate({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListTemplatesQueryKey() });
+        onClose();
+        setForm({ name: "", description: "", introHtml: "", eventsHtml: "", footerHtml: "" });
+      },
+    },
+  });
+
+  const handleSubmit = () => {
+    if (!form.name.trim()) return;
+    createTemplate({ data: { name: form.name, description: form.description || null, introHtml: form.introHtml || null, eventsHtml: form.eventsHtml || null, footerHtml: form.footerHtml || null } });
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Nuovo Template</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1">
+            <Label>Nome *</Label>
+            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Es. Template Beehiiv Standard" />
+          </div>
+          <div className="space-y-1">
+            <Label>Descrizione</Label>
+            <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Descrizione opzionale" />
+          </div>
+          <div className="space-y-1">
+            <Label>HTML Intro</Label>
+            <Textarea rows={4} value={form.introHtml} onChange={e => setForm(f => ({ ...f, introHtml: e.target.value }))} placeholder="<div>...</div>" className="font-mono text-sm" />
+          </div>
+          <div className="space-y-1">
+            <Label>HTML Eventi</Label>
+            <Textarea rows={4} value={form.eventsHtml} onChange={e => setForm(f => ({ ...f, eventsHtml: e.target.value }))} placeholder="<div>...</div>" className="font-mono text-sm" />
+          </div>
+          <div className="space-y-1">
+            <Label>HTML Footer</Label>
+            <Textarea rows={4} value={form.footerHtml} onChange={e => setForm(f => ({ ...f, footerHtml: e.target.value }))} placeholder="<div>...</div>" className="font-mono text-sm" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isPending}>Annulla</Button>
+          <Button onClick={handleSubmit} disabled={isPending || !form.name.trim()}>
+            {isPending ? "Salvataggio..." : "Crea Template"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

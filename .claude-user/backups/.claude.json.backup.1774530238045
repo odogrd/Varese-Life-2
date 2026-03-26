@@ -1,0 +1,14 @@
+{
+  "theme": "light",
+  "customApiKeyResponses": {
+    "approved": [],
+    "rejected": [
+      "FngyTyGRrpw-z1DLlgAA"
+    ]
+  },
+  "firstStartTime": "2026-03-26T13:02:11.973Z",
+  "opusProMigrationComplete": true,
+  "sonnet1m45MigrationComplete": true,
+  "userID": "d94e2954ef3ad3f6d5f3191abca8b21835a46490c8cb823a794a6600712c61ad",
+  "changelogLastFetched": 1774530132289
+}

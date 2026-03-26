@@ -1,6 +1,7 @@
 import { AppLayout } from "@/components/layout";
 import { useListPrompts, useUpdatePrompt, useResetPrompt } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";

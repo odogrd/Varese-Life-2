@@ -9,7 +9,9 @@ import Fonti from "./pages/fonti";
 import Eventi from "./pages/eventi";
 import Prompts from "./pages/prompt";
 import NewsletterList from "./pages/newsletter";
+import NewsletterEdit from "./pages/newsletter-edit";
 import Templates from "./pages/template";
+import TemplateEdit from "./pages/template-edit";
 import Impostazioni from "./pages/impostazioni";
 import Utenti from "./pages/utenti";
 import NotFound from "./pages/not-found";
@@ -33,7 +35,9 @@ function Router() {
       <Route path="/eventi" component={Eventi} />
       <Route path="/prompt" component={Prompts} />
       <Route path="/newsletter" component={NewsletterList} />
+      <Route path="/newsletter/:id">{(params) => <NewsletterEdit id={params.id} />}</Route>
       <Route path="/template" component={Templates} />
+      <Route path="/template/:id">{(params) => <TemplateEdit id={params.id} />}</Route>
       <Route path="/impostazioni" component={Impostazioni} />
       <Route path="/utenti" component={Utenti} />
       <Route component={NotFound} />

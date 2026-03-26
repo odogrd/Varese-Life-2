@@ -2,22 +2,47 @@ import { useState } from "react";
 import { AppLayout } from "@/components/layout";
 import { useListNewsletters, useCreateNewsletter } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit2, Copy, Send } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { Plus, Edit2 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 
 export default function NewsletterList() {
   const { data: newsletters, isLoading } = useListNewsletters();
   const createMutation = useCreateNewsletter();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
   const handleCreate = async () => {
     setIsCreating(true);
     try {
-      await createMutation.mutateAsync({ data: { title: `Newsletter ${format(new Date(), 'dd MMMM yyyy', {locale: it})}` } });
-      // In a real app, wouter Link to the editor page /newsletter/:id
+      const title = dateFrom && dateTo
+        ? `Newsletter ${format(new Date(dateFrom), 'dd MMM', { locale: it })} – ${format(new Date(dateTo), 'dd MMM yyyy', { locale: it })}`
+        : `Newsletter ${format(new Date(), 'dd MMMM yyyy', { locale: it })}`;
+
+      const created = await createMutation.mutateAsync({
+        data: {
+          title,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/newsletters"] });
+      setDialogOpen(false);
+      navigate(`/newsletter/${created.id}`);
+    } catch {
+      toast({ title: "Errore nella creazione", variant: "destructive" });
     } finally {
       setIsCreating(false);
     }
@@ -30,11 +55,53 @@ export default function NewsletterList() {
           <h1 className="text-3xl font-bold font-display text-foreground tracking-tight">Newsletter</h1>
           <p className="text-muted-foreground mt-1">Componi ed esporta le newsletter settimanali per Beehiiv.</p>
         </div>
-        <Button onClick={handleCreate} disabled={isCreating || createMutation.isPending} className="shadow-md">
+        <Button onClick={() => setDialogOpen(true)} className="shadow-md">
           <Plus className="w-4 h-4 mr-2" />
           Nuova Newsletter
         </Button>
       </div>
+
+      {/* Create Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuova Newsletter</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Seleziona il periodo di riferimento per gli eventi da includere nella newsletter.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="dateFrom">Dal</Label>
+                <Input
+                  id="dateFrom"
+                  type="date"
+                  value={dateFrom}
+                  onChange={e => setDateFrom(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="dateTo">Al</Label>
+                <Input
+                  id="dateTo"
+                  type="date"
+                  value={dateTo}
+                  onChange={e => setDateTo(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isCreating}>
+              Annulla
+            </Button>
+            <Button onClick={handleCreate} disabled={isCreating}>
+              {isCreating ? "Creazione..." : "Crea Newsletter"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -69,7 +136,12 @@ export default function NewsletterList() {
                       )}
                     </td>
                     <td className="p-4 text-right">
-                      <Button variant="ghost" size="sm" className="text-primary">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-primary"
+                        onClick={() => navigate(`/newsletter/${nl.id}`)}
+                      >
                         <Edit2 className="w-4 h-4 mr-2" /> Modifica
                       </Button>
                     </td>
