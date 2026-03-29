@@ -413,48 +413,6 @@ export default function Eventi() {
         </div>
       </div>
 
-      {sources && sources.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4">
-          <button
-            onClick={() => setSourceFilter("all")}
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-              sourceFilter === "all"
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
-            }`}
-          >
-            Tutte
-            <span className={`inline-flex items-center justify-center rounded-full px-1.5 min-w-[1.25rem] h-4 text-[10px] font-bold ${
-              sourceFilter === "all" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
-            }`}>
-              {(allEventsData?.total ?? allEventsData?.events?.length ?? 0)}
-            </span>
-          </button>
-          {sources.map(s => {
-            const count = sourceEventCounts[s.id] ?? 0;
-            const active = sourceFilter === s.id.toString();
-            return (
-              <button
-                key={s.id}
-                onClick={() => setSourceFilter(active ? "all" : s.id.toString())}
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  active
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
-                }`}
-              >
-                {s.name}
-                <span className={`inline-flex items-center justify-center rounded-full px-1.5 min-w-[1.25rem] h-4 text-[10px] font-bold ${
-                  active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
-                }`}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       <Dialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>

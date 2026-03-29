@@ -1,0 +1,215 @@
+import { Router } from "express";
+import { db } from "@workspace/db";
+import { eventsTable, sourcesTable, settingsTable } from "@workspace/db/schema";
+import { eq, and, like, gte, lte, lt, inArray, sql, desc } from "drizzle-orm";
+import { requireAuth } from "../middlewares/auth";
+import { claudeRewrite, claudeExtractFromText, claudeExtractFromImages, claudeFetchAndExtract } from "../lib/claude";
+import { triggerBrowserActWorkflow } from "../lib/browseract";
+import { generateDateDisplay, trimDateEndIfMultiWeek } from "../lib/eventProcessing";
+
+const router = Router();
+router.use(requireAuth);
+
+router.get("/events", async (req, res) => {
+  const { status, sourceId, category, dateFrom, dateTo, search, page = "1", limit = "50" } = req.query as Record<string, string>;
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+  const offset = (pageNum - 1) * limitNum;
+
+  let conditions: ReturnType<typeof eq>[] = [];
+  if (status) conditions.push(eq(eventsTable.status, status));
+  if (sourceId) conditions.push(eq(eventsTable.sourceId, parseInt(sourceId)));
+  if (category) conditions.push(eq(eventsTable.category, category));
+  if (dateFrom) conditions.push(gte(eventsTable.dateStart, new Date(dateFrom)));
+  if (dateTo) conditions.push(lte(eventsTable.dateStart, new Date(dateTo)));
+  if (search) conditions.push(like(eventsTable.title, `%${search}%`));
+
+  const where = conditions.length ? and(...conditions) : undefined;
+  const [events, [{ count }]] = await Promise.all([
+    db.select({
+      id: eventsTable.id, sourceId: eventsTable.sourceId, title: eventsTable.title,
+      dateStart: eventsTable.dateStart, dateEnd: eventsTable.dateEnd, dateDisplay: eventsTable.dateDisplay,
+      dateParseConfidence: eventsTable.dateParseConfidence, recurring: eventsTable.recurring,
+      location: eventsTable.location, descriptionRaw: eventsTable.descriptionRaw,
+      descriptionClean: eventsTable.descriptionClean, imageUrl: eventsTable.imageUrl,
+      sourceUrl: eventsTable.sourceUrl, category: eventsTable.category, price: eventsTable.price,
+      status: eventsTable.status, includedInNewsletter: eventsTable.includedInNewsletter,
+      sourceType: eventsTable.sourceType, scraper: eventsTable.scraper,
+      createdAt: eventsTable.createdAt, sourceName: sourcesTable.name,
+    }).from(eventsTable)
+      .leftJoin(sourcesTable, eq(eventsTable.sourceId, sourcesTable.id))
+      .where(where)
+      .orderBy(desc(eventsTable.createdAt))
+      .limit(limitNum)
+      .offset(offset),
+    db.select({ count: sql<number>`count(*)::int` }).from(eventsTable).where(where),
+  ]);
+
+  res.json({ events, total: count, page: pageNum, limit: limitNum });
+});
+
+router.get("/events/:id", async (req, res) => {
+  const [event] = await db.select().from(eventsTable).where(eq(eventsTable.id, parseInt(req.params.id))).limit(1);
+  if (!event) return res.status(404).json({ error: "Evento non trovato" });
+  res.json(event);
+});
+
+router.post("/events", async (req, res) => {
+  const data = req.body;
+  const dateStart = data.dateStart ? new Date(data.dateStart) : null;
+  const dateEnd = trimDateEndIfMultiWeek(dateStart, data.dateEnd ? new Date(data.dateEnd) : null);
+  const [event] = await db.insert(eventsTable).values({
+    ...data,
+    dateStart,
+    dateEnd,
+    status: data.status || "approved",
+    sourceType: data.sourceType || "manual",
+    scraper: "manual",
+  }).returning();
+  res.status(201).json(event);
+});
+
+router.put("/events/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const data = req.body;
+  const dateStart = data.dateStart ? new Date(data.dateStart) : null;
+  const dateEnd = trimDateEndIfMultiWeek(dateStart, data.dateEnd ? new Date(data.dateEnd) : null);
+  const [event] = await db.update(eventsTable).set({
+    ...data,
+    dateStart,
+    dateEnd,
+    updatedAt: new Date(),
+  }).where(eq(eventsTable.id, id)).returning();
+  res.json(event);
+});
+
+router.delete("/events/past", async (_req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    // Keep only events yet to start — delete anything with dateStart before today
+    const result = await db.delete(eventsTable)
+      .where(lt(eventsTable.dateStart, today))
+      .returning({ id: eventsTable.id });
+    res.json({ message: `${result.length} eventi passati eliminati`, deleted: result.length });
+  } catch (err) {
+    console.error("Error deleting past events:", err);
+    res.status(500).json({ error: "Errore durante l'eliminazione degli eventi passati" });
+  }
+});
+
+router.delete("/events/:id", async (req, res) => {
+  await db.delete(eventsTable).where(eq(eventsTable.id, parseInt(req.params.id)));
+  res.json({ message: "Evento eliminato" });
+});
+
+router.post("/events/:id/rewrite", async (req, res) => {
+  const [event] = await db.select().from(eventsTable).where(eq(eventsTable.id, parseInt(req.params.id))).limit(1);
+  if (!event) return res.status(404).json({ error: "Evento non trovato" });
+  if (!event.descriptionRaw) return res.status(400).json({ error: "Nessun testo grezzo disponibile" });
+
+  const clean = await claudeRewrite(event.descriptionRaw, event.title, event.location, event.dateDisplay);
+  const [updated] = await db.update(eventsTable).set({ descriptionClean: clean, updatedAt: new Date() })
+    .where(eq(eventsTable.id, event.id)).returning();
+  res.json(updated);
+});
+
+router.post("/events/:id/rescrape", async (req, res) => {
+  const [event] = await db.select().from(eventsTable).where(eq(eventsTable.id, parseInt(req.params.id))).limit(1);
+  if (!event) return res.status(404).json({ error: "Evento non trovato" });
+  if (!event.sourceUrl) return res.status(400).json({ error: "Nessun URL sorgente" });
+
+  const settingRow = await db.select().from(settingsTable).where(eq(settingsTable.key, "browseract_single_page_workflow_id")).limit(1);
+  const workflowId = settingRow[0]?.value;
+  const appBaseUrl = process.env.APP_BASE_URL || `https://${process.env.REPLIT_DEV_DOMAIN}`;
+
+  let taskId: string | undefined;
+  if (workflowId) {
+    try {
+      const result = await triggerBrowserActWorkflow(workflowId, `${appBaseUrl}/api/browseract/webhook/${event.sourceId || 0}/0`);
+      taskId = result.taskId;
+    } catch {
+      // Fall through to Claude fallback
+    }
+  }
+
+  if (!taskId) {
+    const { events } = await claudeFetchAndExtract(event.sourceUrl);
+    if (events.length > 0) {
+      const raw = events[0] as { description?: string; description_raw?: string };
+      const descRaw = raw.description || raw.description_raw || "";
+      if (descRaw) {
+        const clean = await claudeRewrite(descRaw, event.title, event.location, event.dateDisplay);
+        await db.update(eventsTable).set({ descriptionRaw: descRaw, descriptionClean: clean, updatedAt: new Date() })
+          .where(eq(eventsTable.id, event.id));
+      }
+    }
+  }
+
+  res.json({ message: "Riscraping avviato", taskId });
+});
+
+router.post("/events/bulk", async (req, res) => {
+  const { ids, action } = req.body;
+  if (!Array.isArray(ids) || !action) return res.status(400).json({ error: "Parametri non validi" });
+
+  if (action === "approve") {
+    await db.update(eventsTable).set({ status: "approved" }).where(inArray(eventsTable.id, ids));
+  } else if (action === "reject") {
+    await db.update(eventsTable).set({ status: "rejected" }).where(inArray(eventsTable.id, ids));
+  } else if (action === "include_newsletter") {
+    await db.update(eventsTable).set({ includedInNewsletter: true }).where(inArray(eventsTable.id, ids));
+  } else if (action === "delete") {
+    await db.delete(eventsTable).where(inArray(eventsTable.id, ids));
+  } else {
+    return res.status(400).json({ error: "Azione non valida" });
+  }
+
+  res.json({ message: `Azione eseguita su ${ids.length} eventi` });
+});
+
+router.post("/events/extract-screenshot", async (req, res) => {
+  const { images, sourceUrl } = req.body;
+  if (!Array.isArray(images) || !images.length) return res.status(400).json({ error: "Immagini richieste" });
+  const fields = await claudeExtractFromImages(images);
+  res.json({ ...fields, sourceUrl: sourceUrl || fields.source_url, dateParseConfidence: (fields as any).date_parse_confidence || "medium", recurring: false });
+});
+
+router.post("/events/extract-text", async (req, res) => {
+  const { text, sourceUrl } = req.body;
+  if (!text) return res.status(400).json({ error: "Testo richiesto" });
+  const fields = await claudeExtractFromText(text, "extraction_text");
+  res.json({ ...fields, sourceUrl: sourceUrl || (fields as any).source_url, dateParseConfidence: (fields as any).date_parse_confidence || "medium", recurring: false });
+});
+
+router.post("/events/extract-url", async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: "URL richiesto" });
+
+  const settingRow = await db.select().from(settingsTable).where(eq(settingsTable.key, "browseract_single_page_workflow_id")).limit(1);
+  const workflowId = settingRow[0]?.value;
+  const appBaseUrl = process.env.APP_BASE_URL || `https://${process.env.REPLIT_DEV_DOMAIN}`;
+
+  // Try BrowserAct first, fall back to Claude fetch
+  try {
+    if (workflowId) {
+      await triggerBrowserActWorkflow(workflowId, `${appBaseUrl}/api/browseract/webhook/0/0`);
+      return res.json({ message: "Estrazione avviata via BrowserAct", sourceUrl: url, dateParseConfidence: "medium", recurring: false });
+    }
+  } catch { /* fall through */ }
+
+  const { events } = await claudeFetchAndExtract(url);
+  if (events.length > 0) {
+    const event = events[0] as Record<string, unknown>;
+    res.json({
+      title: event.title, dateStart: event.date || event.date_start,
+      location: event.location, descriptionRaw: event.description || event.description_raw,
+      descriptionClean: event.description_clean, category: event.category, price: event.price,
+      sourceUrl: url, dateParseConfidence: "medium", recurring: false,
+    });
+  } else {
+    res.json({ sourceUrl: url, dateParseConfidence: "low", recurring: false });
+  }
+});
+
+export default router;

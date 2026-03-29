@@ -412,7 +412,7 @@
       "enabledMcpjsonServers": [],
       "disabledMcpjsonServers": [],
       "hasTrustDialogAccepted": true,
-      "projectOnboardingSeenCount": 19,
+      "projectOnboardingSeenCount": 26,
       "hasClaudeMdExternalIncludesApproved": false,
       "hasClaudeMdExternalIncludesWarningShown": false,
       "exampleFiles": [
@@ -426,7 +426,7 @@
     }
   },
   "voiceNoticeSeenCount": 3,
-  "lastReleaseNotesSeen": "2.1.84",
+  "lastReleaseNotesSeen": "2.1.87",
   "clientDataCache": {},
   "additionalModelOptionsCache": [],
   "groveConfigCache": {
@@ -448,7 +448,7 @@
         "amount_minor_units": null,
         "currency": null
       },
-      "timestamp": 1774785969989
+      "timestamp": 1774793298188
     }
   }
 }
