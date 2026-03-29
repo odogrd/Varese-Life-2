@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, 
@@ -14,7 +14,7 @@ import {
   Menu
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useGetMe, useLogout, useGetUnresolvedErrorCount, useListEvents } from "@workspace/api-client-react";
+import { useGetMe, useLogout, useGetUnresolvedErrorCount } from "@workspace/api-client-react";
 import { 
   SidebarProvider, 
   Sidebar, 
@@ -34,7 +34,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { data: user, isLoading: isUserLoading } = useGetMe();
   const logoutMutation = useLogout();
   const { data: errorCount } = useGetUnresolvedErrorCount();
-  const { data: eventsData } = useListEvents({ limit: 1 });
 
   useEffect(() => {
     if (!isUserLoading && !user) {
@@ -59,12 +58,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
     setLocation("/login");
   };
 
-  const eventTotal = eventsData?.total;
-
-  const navItems: { title: string; url: string; icon: React.ElementType; badge?: number }[] = [
+  const navItems = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "Fonti", url: "/fonti", icon: Rss },
-    { title: "Eventi", url: "/eventi", icon: CalendarDays, badge: eventTotal },
+    { title: "Eventi", url: "/eventi", icon: CalendarDays },
     { title: "Prompt AI", url: "/prompt", icon: MessageSquareQuote },
     { title: "Newsletter", url: "/newsletter", icon: Mail },
     { title: "Template", url: "/template", icon: FileCode2 },
@@ -93,12 +90,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                         <SidebarMenuButton asChild isActive={isActive} tooltip={item.title} className="hover-elevate">
                           <Link href={item.url} className={isActive ? "font-medium text-primary" : "text-muted-foreground"}>
                             <item.icon className={isActive ? "text-primary" : ""} />
-                            <span className="flex-1">{item.title}</span>
-                            {item.badge !== undefined && (
-                              <Badge variant="secondary" className="ml-auto text-xs px-1.5 py-0 h-5 min-w-[1.25rem] justify-center">
-                                {item.badge}
-                              </Badge>
-                            )}
+                            <span>{item.title}</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>

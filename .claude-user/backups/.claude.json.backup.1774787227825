@@ -21,7 +21,7 @@
     "todo-list": 2,
     "install-github-app": 2,
     "install-slack-app": 2,
-    "ide-upsell-external-terminal": 2,
+    "ide-upsell-external-terminal": 6,
     "drag-and-drop-images": 2,
     "double-esc-code-restore": 2,
     "continue": 2,
@@ -30,7 +30,8 @@
     "web-app": 2,
     "mobile-app": 2,
     "custom-agents": 6,
-    "agent-flag": 6
+    "agent-flag": 6,
+    "feedback-command": 6
   },
   "promptQueueUseCount": 1,
   "cachedGrowthBookFeatures": {
@@ -411,7 +412,7 @@
       "enabledMcpjsonServers": [],
       "disabledMcpjsonServers": [],
       "hasTrustDialogAccepted": true,
-      "projectOnboardingSeenCount": 8,
+      "projectOnboardingSeenCount": 12,
       "hasClaudeMdExternalIncludesApproved": false,
       "hasClaudeMdExternalIncludesWarningShown": false,
       "exampleFiles": [
@@ -447,7 +448,7 @@
         "amount_minor_units": null,
         "currency": null
       },
-      "timestamp": 1774782230855
+      "timestamp": 1774785969989
     }
   }
 }

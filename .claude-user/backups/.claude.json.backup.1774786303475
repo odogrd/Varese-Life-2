@@ -412,7 +412,7 @@
       "enabledMcpjsonServers": [],
       "disabledMcpjsonServers": [],
       "hasTrustDialogAccepted": true,
-      "projectOnboardingSeenCount": 9,
+      "projectOnboardingSeenCount": 11,
       "hasClaudeMdExternalIncludesApproved": false,
       "hasClaudeMdExternalIncludesWarningShown": false,
       "exampleFiles": [
@@ -448,7 +448,7 @@
         "amount_minor_units": null,
         "currency": null
       },
-      "timestamp": 1774782230855
+      "timestamp": 1774785969989
     }
   }
 }

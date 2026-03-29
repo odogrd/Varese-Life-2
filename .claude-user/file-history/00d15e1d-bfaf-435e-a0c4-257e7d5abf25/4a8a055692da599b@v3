@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { eventsTable, sourcesTable, settingsTable } from "@workspace/db/schema";
-import { eq, and, or, isNull, isNotNull, like, gte, lte, lt, inArray, sql, desc } from "drizzle-orm";
+import { eq, and, like, gte, lte, lt, inArray, sql, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { claudeRewrite, claudeExtractFromText, claudeExtractFromImages, claudeFetchAndExtract } from "../lib/claude";
 import { triggerBrowserActWorkflow } from "../lib/browseract";
@@ -84,23 +84,13 @@ router.put("/events/:id", async (req, res) => {
 });
 
 router.delete("/events/past", async (_req, res) => {
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    // Past = event has ended (dateEnd < today) OR has no end but started before today (dateStart < today)
-    const result = await db.delete(eventsTable)
-      .where(
-        or(
-          and(isNotNull(eventsTable.dateEnd), lt(eventsTable.dateEnd, today)),
-          and(isNull(eventsTable.dateEnd), lt(eventsTable.dateStart, today)),
-        )
-      )
-      .returning({ id: eventsTable.id });
-    res.json({ message: `${result.length} eventi passati eliminati`, deleted: result.length });
-  } catch (err) {
-    console.error("Error deleting past events:", err);
-    res.status(500).json({ error: "Errore durante l'eliminazione degli eventi passati" });
-  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  // Past = COALESCE(dateEnd, dateStart) < today
+  const result = await db.delete(eventsTable)
+    .where(sql`COALESCE(${eventsTable.dateEnd}, ${eventsTable.dateStart}) < ${today}`)
+    .returning({ id: eventsTable.id });
+  res.json({ message: `${result.length} eventi passati eliminati`, deleted: result.length });
 });
 
 router.delete("/events/:id", async (req, res) => {
