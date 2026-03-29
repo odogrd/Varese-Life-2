@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { newslettersTable, newsletterEventsTable, eventsTable, templatesTable } from "@workspace/db/schema";
-import { eq, and, gte, lte, inArray, asc } from "drizzle-orm";
+import { eq, inArray, asc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { claudeGenerateNewsletterIntro } from "../lib/claude";
 
@@ -35,25 +35,6 @@ router.post("/newsletters", async (req, res) => {
   const { title, templateId, dateFrom, dateTo } = req.body;
   if (!title) return res.status(400).json({ error: "Titolo richiesto" });
   const [newsletter] = await db.insert(newslettersTable).values({ title, templateId, dateFrom, dateTo }).returning();
-
-  // Auto-populate with approved events in the date range
-  if (dateFrom && dateTo) {
-    const events = await db.select({ id: eventsTable.id })
-      .from(eventsTable)
-      .where(and(
-        eq(eventsTable.status, "approved"),
-        gte(eventsTable.dateStart, new Date(dateFrom)),
-        lte(eventsTable.dateStart, new Date(dateTo)),
-      ))
-      .orderBy(asc(eventsTable.dateStart));
-
-    if (events.length > 0) {
-      await db.insert(newsletterEventsTable).values(
-        events.map((e, i) => ({ newsletterId: newsletter.id, eventId: e.id, sortOrder: i }))
-      );
-    }
-  }
-
   res.status(201).json(newsletter);
 });
 

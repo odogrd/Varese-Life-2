@@ -45,6 +45,8 @@ export interface Source {
   promptOverride?: string | null;
   active: boolean;
   lastScrapedAt?: string | null;
+  lastScrapeCount?: number | null;
+  lastScrapeErrors?: number | null;
   createdAt: string;
   preferredScraper: string;
 }

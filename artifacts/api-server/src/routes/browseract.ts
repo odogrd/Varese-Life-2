@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sourcesTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { processRawEvents } from "../lib/eventProcessing";
 import { getBrowserActTaskStatus } from "../lib/browseract";
 
@@ -26,8 +26,12 @@ router.post("/browseract/webhook/:sourceId/:sourceUrlId", async (req, res) => {
     events = [body];
   }
 
-  await processRawEvents(events as any[], sourceId, "browseract");
-  await db.update(sourcesTable).set({ lastScrapedAt: new Date() }).where(eq(sourcesTable.id, sourceId));
+  const { saved, errors } = await processRawEvents(events as any[], sourceId, "browseract");
+  await db.update(sourcesTable).set({
+    lastScrapedAt: new Date(),
+    lastScrapeCount: sql`COALESCE(last_scrape_count, 0) + ${saved}`,
+    lastScrapeErrors: sql`COALESCE(last_scrape_errors, 0) + ${errors}`,
+  }).where(eq(sourcesTable.id, sourceId));
   res.json({ message: "OK" });
 });
 

@@ -43,7 +43,7 @@ export default function NewsletterEdit({ id }: Props) {
   const [dateTo, setDateTo] = useState("");
   const [introHtml, setIntroHtml] = useState("");
   const [selectedEventIds, setSelectedEventIds] = useState<number[]>([]);
-  const [showEventPicker, setShowEventPicker] = useState(true);
+  const [showEventPicker, setShowEventPicker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 

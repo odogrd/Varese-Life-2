@@ -9,6 +9,8 @@ export const sourcesTable = pgTable("sources", {
   promptOverride: text("prompt_override"),
   active: boolean("active").notNull().default(true),
   lastScrapedAt: timestamp("last_scraped_at"),
+  lastScrapeCount: integer("last_scrape_count"),
+  lastScrapeErrors: integer("last_scrape_errors"),
   preferredScraper: text("preferred_scraper").notNull().default("browseract"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

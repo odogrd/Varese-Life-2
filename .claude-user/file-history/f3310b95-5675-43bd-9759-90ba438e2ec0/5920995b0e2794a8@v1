@@ -1,21 +1,21 @@
 import { useState } from "react";
 import { AppLayout } from "@/components/layout";
-import { useListNewsletters, useCreateNewsletter, useDeleteNewsletter } from "@workspace/api-client-react";
+import { useListNewsletters, useCreateNewsletter } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Plus, Edit2, CalendarDays, Trash2 } from "lucide-react";
+import { Plus, Edit2, CalendarDays } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { it } from "date-fns/locale";
 
 export default function NewsletterList() {
   const { data: newsletters, isLoading } = useListNewsletters();
   const createMutation = useCreateNewsletter();
-  const deleteMutation = useDeleteNewsletter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -23,7 +23,6 @@ export default function NewsletterList() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const handleCreate = async () => {
     setIsCreating(true);
@@ -49,19 +48,6 @@ export default function NewsletterList() {
     }
   };
 
-  const handleDelete = async () => {
-    if (deleteId === null) return;
-    try {
-      await deleteMutation.mutateAsync({ id: deleteId });
-      toast({ title: "Newsletter eliminata" });
-      queryClient.invalidateQueries({ queryKey: ["/api/newsletters"] });
-    } catch {
-      toast({ title: "Errore nell'eliminazione", variant: "destructive" });
-    } finally {
-      setDeleteId(null);
-    }
-  };
-
   return (
     <AppLayout>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
@@ -74,23 +60,6 @@ export default function NewsletterList() {
           Nuova Newsletter
         </Button>
       </div>
-
-      <Dialog open={deleteId !== null} onOpenChange={open => { if (!open) setDeleteId(null); }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Eliminare la newsletter?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground py-2">
-            Questa azione è irreversibile.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteId(null)}>Annulla</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleteMutation.isPending}>
-              {deleteMutation.isPending ? "Eliminazione..." : "Elimina"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Create Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -155,14 +124,15 @@ export default function NewsletterList() {
                 <th className="p-4">Titolo</th>
                 <th className="p-4">Data Creazione</th>
                 <th className="p-4">Range Eventi</th>
+                <th className="p-4">Stato</th>
                 <th className="p-4 text-right">Azioni</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/30">
               {isLoading ? (
-                <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">Caricamento...</td></tr>
+                <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">Caricamento...</td></tr>
               ) : newsletters?.length === 0 ? (
-                <tr><td colSpan={4} className="p-12 text-center text-muted-foreground">Nessuna newsletter. Creane una nuova.</td></tr>
+                <tr><td colSpan={5} className="p-12 text-center text-muted-foreground">Nessuna newsletter. Creane una nuova.</td></tr>
               ) : (
                 newsletters?.map(nl => (
                   <tr key={nl.id} className="hover:bg-muted/10 transition-colors">
@@ -171,25 +141,22 @@ export default function NewsletterList() {
                     <td className="p-4 text-muted-foreground text-xs">
                       {nl.dateFrom ? format(new Date(nl.dateFrom), 'dd/MM') : '-'} ➔ {nl.dateTo ? format(new Date(nl.dateTo), 'dd/MM') : '-'}
                     </td>
+                    <td className="p-4">
+                      {nl.status === 'draft' ? (
+                        <Badge variant="outline" className="bg-muted text-muted-foreground">Bozza</Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Esportata</Badge>
+                      )}
+                    </td>
                     <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-primary"
-                          onClick={() => navigate(`/newsletter/${nl.id}`)}
-                        >
-                          <Edit2 className="w-4 h-4 mr-2" /> Modifica
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-muted-foreground hover:text-destructive"
-                          onClick={() => setDeleteId(nl.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-primary"
+                        onClick={() => navigate(`/newsletter/${nl.id}`)}
+                      >
+                        <Edit2 className="w-4 h-4 mr-2" /> Modifica
+                      </Button>
                     </td>
                   </tr>
                 ))

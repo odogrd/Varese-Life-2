@@ -159,8 +159,6 @@ router.post("/events/bulk", async (req, res) => {
     await db.update(eventsTable).set({ status: "rejected" }).where(inArray(eventsTable.id, ids));
   } else if (action === "include_newsletter") {
     await db.update(eventsTable).set({ includedInNewsletter: true }).where(inArray(eventsTable.id, ids));
-  } else if (action === "delete") {
-    await db.delete(eventsTable).where(inArray(eventsTable.id, ids));
   } else {
     return res.status(400).json({ error: "Azione non valida" });
   }

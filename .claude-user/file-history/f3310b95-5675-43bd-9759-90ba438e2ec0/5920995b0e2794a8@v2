@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AppLayout } from "@/components/layout";
 import { useListNewsletters, useCreateNewsletter, useDeleteNewsletter } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -155,14 +156,15 @@ export default function NewsletterList() {
                 <th className="p-4">Titolo</th>
                 <th className="p-4">Data Creazione</th>
                 <th className="p-4">Range Eventi</th>
+                <th className="p-4">Stato</th>
                 <th className="p-4 text-right">Azioni</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/30">
               {isLoading ? (
-                <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">Caricamento...</td></tr>
+                <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">Caricamento...</td></tr>
               ) : newsletters?.length === 0 ? (
-                <tr><td colSpan={4} className="p-12 text-center text-muted-foreground">Nessuna newsletter. Creane una nuova.</td></tr>
+                <tr><td colSpan={5} className="p-12 text-center text-muted-foreground">Nessuna newsletter. Creane una nuova.</td></tr>
               ) : (
                 newsletters?.map(nl => (
                   <tr key={nl.id} className="hover:bg-muted/10 transition-colors">
@@ -170,6 +172,13 @@ export default function NewsletterList() {
                     <td className="p-4 text-muted-foreground">{format(new Date(nl.createdAt), 'dd MMM yyyy', { locale: it })}</td>
                     <td className="p-4 text-muted-foreground text-xs">
                       {nl.dateFrom ? format(new Date(nl.dateFrom), 'dd/MM') : '-'} ➔ {nl.dateTo ? format(new Date(nl.dateTo), 'dd/MM') : '-'}
+                    </td>
+                    <td className="p-4">
+                      {nl.status === 'draft' ? (
+                        <Badge variant="outline" className="bg-muted text-muted-foreground">Bozza</Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Esportata</Badge>
+                      )}
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1">

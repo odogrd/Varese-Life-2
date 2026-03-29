@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sourcesTable, sourceUrlsTable, errorLogsTable } from "@workspace/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { triggerBrowserActWorkflow } from "../lib/browseract";
 import { processRawEvents } from "../lib/eventProcessing";
@@ -95,17 +95,22 @@ router.delete("/sources/:id", async (req, res) => {
 async function triggerScrapeForSource(source: typeof sourcesTable.$inferSelect, urls: typeof sourceUrlsTable.$inferSelect[], req: any) {
   const appBaseUrl = process.env.APP_BASE_URL || `https://${process.env.REPLIT_DEV_DOMAIN}`;
   const taskIds: string[] = [];
+  let totalSaved = 0;
+  let totalErrors = 0;
+  let hasBrowserActUrls = false;
 
   for (const url of urls.filter(u => u.active)) {
     const workflowId = url.browseractWorkflowId || source.browseractWorkflowId;
 
     if (source.preferredScraper === "claude_fallback" || !workflowId) {
-      // Claude fallback - run inline
+      // Claude fallback - run inline and accumulate counts
       try {
         const { events } = await claudeFetchAndExtract(url.url);
-        await processRawEvents(events as any[], source.id, "claude_fallback");
-        await db.update(sourcesTable).set({ lastScrapedAt: new Date() }).where(eq(sourcesTable.id, source.id));
+        const { saved, errors } = await processRawEvents(events as any[], source.id, "claude_fallback");
+        totalSaved += saved;
+        totalErrors += errors;
       } catch (err) {
+        totalErrors++;
         await db.insert(errorLogsTable).values({
           errorType: "scraping_error",
           sourceId: source.id,
@@ -115,6 +120,7 @@ async function triggerScrapeForSource(source: typeof sourcesTable.$inferSelect, 
         });
       }
     } else {
+      hasBrowserActUrls = true;
       try {
         const callbackUrl = `${appBaseUrl}/api/browseract/webhook/${source.id}/${url.id}`;
         const { taskId } = await triggerBrowserActWorkflow(workflowId, callbackUrl);
@@ -140,14 +146,31 @@ async function triggerScrapeForSource(source: typeof sourcesTable.$inferSelect, 
           // Fallback to Claude
           try {
             const { events } = await claudeFetchAndExtract(url.url);
-            await processRawEvents(events as any[], source.id, "claude_fallback");
+            const { saved, errors } = await processRawEvents(events as any[], source.id, "claude_fallback");
+            totalSaved += saved;
+            totalErrors += errors;
           } catch { /* ignore fallback errors */ }
         }
       }
     }
   }
 
-  await db.update(sourcesTable).set({ lastScrapedAt: new Date() }).where(eq(sourcesTable.id, source.id));
+  if (hasBrowserActUrls) {
+    // BrowserAct is async — reset counts now so webhooks can increment them
+    await db.update(sourcesTable).set({
+      lastScrapedAt: new Date(),
+      lastScrapeCount: 0,
+      lastScrapeErrors: 0,
+    }).where(eq(sourcesTable.id, source.id));
+  } else {
+    // Claude inline — write final totals immediately
+    await db.update(sourcesTable).set({
+      lastScrapedAt: new Date(),
+      lastScrapeCount: totalSaved,
+      lastScrapeErrors: totalErrors,
+    }).where(eq(sourcesTable.id, source.id));
+  }
+
   return taskIds;
 }
 
