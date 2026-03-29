@@ -57,6 +57,7 @@ export default function Eventi() {
   const { toast } = useToast();
 
   const [confirmDeletePast, setConfirmDeletePast] = useState(false);
+  const [showSourceChips, setShowSourceChips] = useState(false);
 
   const handleDeletePast = async () => {
     try {
@@ -414,44 +415,55 @@ export default function Eventi() {
       </div>
 
       {sources && sources.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="mb-4">
           <button
-            onClick={() => setSourceFilter("all")}
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-              sourceFilter === "all"
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
-            }`}
+            onClick={() => setShowSourceChips(v => !v)}
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2"
           >
-            Tutte
-            <span className={`inline-flex items-center justify-center rounded-full px-1.5 min-w-[1.25rem] h-4 text-[10px] font-bold ${
-              sourceFilter === "all" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
-            }`}>
-              {(allEventsData?.total ?? allEventsData?.events?.length ?? 0)}
-            </span>
+            {showSourceChips ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            Filtra per fonte ({sources.length})
           </button>
-          {sources.map(s => {
-            const count = sourceEventCounts[s.id] ?? 0;
-            const active = sourceFilter === s.id.toString();
-            return (
+          {showSourceChips && (
+            <div className="flex flex-wrap gap-2">
               <button
-                key={s.id}
-                onClick={() => setSourceFilter(active ? "all" : s.id.toString())}
+                onClick={() => setSourceFilter("all")}
                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  active
+                  sourceFilter === "all"
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
                 }`}
               >
-                {s.name}
+                Tutte
                 <span className={`inline-flex items-center justify-center rounded-full px-1.5 min-w-[1.25rem] h-4 text-[10px] font-bold ${
-                  active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
+                  sourceFilter === "all" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
                 }`}>
-                  {count}
+                  {(allEventsData?.total ?? allEventsData?.events?.length ?? 0)}
                 </span>
               </button>
-            );
-          })}
+              {sources.map(s => {
+                const count = sourceEventCounts[s.id] ?? 0;
+                const active = sourceFilter === s.id.toString();
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setSourceFilter(active ? "all" : s.id.toString())}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      active
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+                    }`}
+                  >
+                    {s.name}
+                    <span className={`inline-flex items-center justify-center rounded-full px-1.5 min-w-[1.25rem] h-4 text-[10px] font-bold ${
+                      active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -549,7 +561,14 @@ export default function Eventi() {
                     </td>
                     <td className="p-4">
                       <div className="flex flex-col gap-1 items-start">
-                        <span className="text-xs truncate max-w-[150px]">{event.sourceName || 'Manuale'}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs truncate max-w-[130px]">{event.sourceName || 'Manuale'}</span>
+                          {event.sourceId != null && sourceEventCounts[event.sourceId] != null && (
+                            <span className="inline-flex items-center justify-center rounded-full bg-muted text-muted-foreground px-1.5 min-w-[1.25rem] h-4 text-[10px] font-bold shrink-0">
+                              {sourceEventCounts[event.sourceId]}
+                            </span>
+                          )}
+                        </div>
                         <Badge variant="outline" className={`text-[10px] uppercase tracking-wider ${event.sourceType === 'manual' ? 'text-purple-600 border-purple-200' : 'text-blue-600 border-blue-200'}`}>
                           {event.sourceType}
                         </Badge>
