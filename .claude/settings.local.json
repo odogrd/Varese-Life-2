@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find /home/runner/workspace -type f \\\\\\(-name *.tsx -o -name *.ts -o -name *.jsx -o -name *.js \\\\\\) ! -path */node_modules/* ! -path */.local/* ! -path */.cache/*)"
+      "Bash(find /home/runner/workspace -type f \\\\\\(-name *.tsx -o -name *.ts -o -name *.jsx -o -name *.js \\\\\\) ! -path */node_modules/* ! -path */.local/* ! -path */.cache/*)",
+      "Bash(find /home/runner/workspace/artifacts/api-server -type f -name *.ts -not -path */node_modules/*)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx|js\\)$\")",
+      "WebFetch(domain:en.wikipedia.org)"
     ]
   }
 }

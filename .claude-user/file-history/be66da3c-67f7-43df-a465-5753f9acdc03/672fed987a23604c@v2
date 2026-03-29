@@ -1,0 +1,256 @@
+import { useState, useEffect } from "react";
+import { AppLayout } from "@/components/layout";
+import {
+  useGetNewsletter,
+  useUpdateNewsletter,
+  useUpdateNewsletterEvents,
+  useExportNewsletter,
+  useGenerateNewsletterIntro,
+  useListEvents,
+} from "@workspace/api-client-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/components/ui/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Save, Download, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { useLocation } from "wouter";
+import { format } from "date-fns";
+import { it } from "date-fns/locale";
+
+interface Props {
+  id: string;
+}
+
+export default function NewsletterEdit({ id }: Props) {
+  const numericId = Number(id);
+  const { data: newsletter, isLoading } = useGetNewsletter(numericId);
+  const updateMutation = useUpdateNewsletter();
+  const updateEventsMutation = useUpdateNewsletterEvents();
+  const exportQuery = useExportNewsletter(numericId, { query: { enabled: false } });
+  const generateIntroMutation = useGenerateNewsletterIntro();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+
+  const { data: eventsData } = useListEvents({ status: "approved", limit: 100 });
+
+  const [title, setTitle] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [introHtml, setIntroHtml] = useState("");
+  const [selectedEventIds, setSelectedEventIds] = useState<number[]>([]);
+  const [showEventPicker, setShowEventPicker] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    if (newsletter) {
+      setTitle(newsletter.title);
+      setDateFrom(newsletter.dateFrom ?? "");
+      setDateTo(newsletter.dateTo ?? "");
+      setIntroHtml(newsletter.introHtml ?? "");
+      setSelectedEventIds(newsletter.events?.map((e: { id: number }) => e.id) ?? []);
+    }
+  }, [newsletter]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateMutation.mutateAsync({
+        id: numericId,
+        data: {
+          title,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+          introHtml: introHtml || undefined,
+        },
+      });
+      await updateEventsMutation.mutateAsync({
+        id: numericId,
+        data: { eventIds: selectedEventIds },
+      });
+      toast({ title: "Newsletter salvata" });
+      queryClient.invalidateQueries({ queryKey: ["/api/newsletters"] });
+    } catch {
+      toast({ title: "Errore nel salvataggio", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const result = await exportQuery.refetch();
+      if (result.data) {
+        const blob = new Blob([result.data.introHtml + result.data.eventsHtml + result.data.footerHtml], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${title.replace(/\s+/g, "_")}.html`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast({ title: "Newsletter esportata" });
+        queryClient.invalidateQueries({ queryKey: ["/api/newsletters"] });
+      }
+    } catch {
+      toast({ title: "Errore nell'esportazione", variant: "destructive" });
+    }
+  };
+
+  const handleGenerateIntro = async () => {
+    setIsGenerating(true);
+    try {
+      const result = await generateIntroMutation.mutateAsync({ id: numericId });
+      if (result.introHtml) setIntroHtml(result.introHtml);
+      toast({ title: "Intro generata con AI" });
+    } catch {
+      toast({ title: "Errore nella generazione AI", variant: "destructive" });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const toggleEvent = (eventId: number) => {
+    setSelectedEventIds(prev =>
+      prev.includes(eventId) ? prev.filter(id => id !== eventId) : [...prev, eventId]
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="p-8 text-center text-muted-foreground animate-pulse">Caricamento...</div>
+      </AppLayout>
+    );
+  }
+
+  return (
+    <AppLayout>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/newsletter")} className="text-muted-foreground">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-bold font-display text-foreground tracking-tight">
+                {newsletter?.title ?? "Newsletter"}
+              </h1>
+              {newsletter?.status === "exported" && (
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Esportata</Badge>
+              )}
+            </div>
+            <p className="text-muted-foreground mt-1">Modifica contenuto ed eventi della newsletter.</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={exportQuery.isFetching}>
+            <Download className="w-4 h-4 mr-2" />
+            {exportQuery.isFetching ? "Esportazione..." : "Esporta HTML"}
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving} className="shadow-md">
+            <Save className="w-4 h-4 mr-2" />
+            {isSaving ? "Salvataggio..." : "Salva"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Meta */}
+      <div className="bg-card rounded-xl border border-border/50 shadow-sm p-6 mb-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="space-y-2 md:col-span-1">
+          <Label htmlFor="title">Titolo</Label>
+          <Input id="title" value={title} onChange={e => setTitle(e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="dateFrom">Dal</Label>
+          <Input id="dateFrom" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="dateTo">Al</Label>
+          <Input id="dateTo" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+        </div>
+      </div>
+
+      {/* Intro HTML */}
+      <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden mb-6">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-muted/20">
+          <div>
+            <h2 className="font-semibold text-foreground">Testo Introduttivo</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">HTML della sezione introduttiva della newsletter.</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={handleGenerateIntro}
+            disabled={isGenerating}
+          >
+            <Sparkles className="w-4 h-4" />
+            {isGenerating ? "Generazione..." : "Genera con AI"}
+          </Button>
+        </div>
+        <Textarea
+          value={introHtml}
+          onChange={e => setIntroHtml(e.target.value)}
+          placeholder="<p>Questa settimana a Varese...</p>"
+          className="font-mono text-xs border-0 rounded-none focus-visible:ring-0 resize-none min-h-[180px] p-6"
+        />
+      </div>
+
+      {/* Event Selection */}
+      <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden mb-8">
+        <button
+          className="w-full flex items-center justify-between px-6 py-4 border-b border-border/50 bg-muted/20 hover:bg-muted/30 transition-colors"
+          onClick={() => setShowEventPicker(p => !p)}
+        >
+          <div className="text-left">
+            <h2 className="font-semibold text-foreground">
+              Eventi Selezionati
+              <span className="ml-2 text-sm font-normal text-muted-foreground">({selectedEventIds.length} selezionati)</span>
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Scegli gli eventi approvati da includere.</p>
+          </div>
+          {showEventPicker ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+        </button>
+
+        {showEventPicker && (
+          <div className="divide-y divide-border/30 max-h-[400px] overflow-y-auto">
+            {eventsData?.events?.length === 0 ? (
+              <div className="p-6 text-center text-muted-foreground text-sm">Nessun evento approvato disponibile.</div>
+            ) : (
+              eventsData?.events?.map(event => (
+                <label
+                  key={event.id}
+                  className="flex items-center gap-4 px-6 py-3 hover:bg-muted/10 cursor-pointer transition-colors"
+                >
+                  <Checkbox
+                    checked={selectedEventIds.includes(event.id)}
+                    onCheckedChange={() => toggleEvent(event.id)}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-foreground text-sm truncate">{event.title}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {event.dateStart ? format(new Date(event.dateStart), 'dd MMM yyyy', { locale: it }) : 'Data sconosciuta'}
+                      {event.location && ` · ${event.location}`}
+                    </div>
+                  </div>
+                </label>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end">
+        <Button onClick={handleSave} disabled={isSaving} size="lg" className="shadow-md">
+          <Save className="w-4 h-4 mr-2" />
+          {isSaving ? "Salvataggio..." : "Salva Newsletter"}
+        </Button>
+      </div>
+    </AppLayout>
+  );
+}

@@ -1,15 +1,19 @@
 import { useState } from "react";
 import { AppLayout } from "@/components/layout";
-import { useListEvents, useBulkUpdateEvents, useDeleteEvent, useListSources } from "@workspace/api-client-react";
+import { useListEvents, useBulkUpdateEvents, useDeleteEvent, useListSources, useCreateEvent, useUpdateEvent, useDeletePastEvents } from "@workspace/api-client-react";
+import type { UpdateEventRequest, Event as ApiEvent } from "@workspace/api-client-react/src/generated/api.schemas";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Search, Plus, Filter, AlertTriangle, CheckCircle2, XCircle, MapPin, Clock, Trash2, Eye, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Search, Plus, AlertTriangle, CheckCircle2, XCircle, MapPin, Trash2, Pencil, ChevronUp, ChevronDown, ChevronsUpDown, Eye, Clock, Calendar } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -31,8 +35,108 @@ export default function Eventi() {
   const { data: sources } = useListSources();
   const bulkMutation = useBulkUpdateEvents();
   const deleteMutation = useDeleteEvent();
+  const createMutation = useCreateEvent();
+  const updateMutation = useUpdateEvent();
+  const deletePastMutation = useDeletePastEvents();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const [confirmDeletePast, setConfirmDeletePast] = useState(false);
+
+  const handleDeletePast = async () => {
+    try {
+      const result = await deletePastMutation.mutateAsync();
+      toast({ title: "Eventi passati eliminati", description: `${result.deleted} eventi rimossi.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+    } catch {
+      toast({ title: "Errore", variant: "destructive", description: "Impossibile eliminare gli eventi passati." });
+    } finally {
+      setConfirmDeletePast(false);
+    }
+  };
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDateStart, setNewDateStart] = useState("");
+  const [newDateEnd, setNewDateEnd] = useState("");
+  const [newLocation, setNewLocation] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newPrice, setNewPrice] = useState("");
+  const [newUrl, setNewUrl] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [editingEvent, setEditingEvent] = useState<ApiEvent | null>(null);
+  const [editForm, setEditForm] = useState<UpdateEventRequest>({});
+
+  const openEdit = (event: ApiEvent) => {
+    setEditingEvent(event);
+    setEditForm({
+      title: event.title,
+      dateStart: event.dateStart ?? null,
+      dateEnd: event.dateEnd ?? null,
+      dateDisplay: event.dateDisplay ?? null,
+      location: event.location ?? null,
+      descriptionRaw: event.descriptionRaw ?? null,
+      price: event.price ?? null,
+      sourceUrl: event.sourceUrl ?? null,
+      status: event.status,
+    });
+  };
+
+  const handleUpdate = async () => {
+    if (!editingEvent) return;
+    if (!editForm.title?.trim()) {
+      toast({ title: "Il titolo è obbligatorio", variant: "destructive" });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await updateMutation.mutateAsync({ id: editingEvent.id, data: editForm });
+      toast({ title: "Evento aggiornato" });
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      setEditingEvent(null);
+    } catch {
+      toast({ title: "Errore nell'aggiornamento", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openAdd = () => {
+    setNewTitle(""); setNewDateStart(""); setNewDateEnd("");
+    setNewLocation(""); setNewDescription(""); setNewPrice(""); setNewUrl("");
+    setAddOpen(true);
+  };
+
+  const handleCreate = async () => {
+    if (!newTitle.trim()) {
+      toast({ title: "Il titolo è obbligatorio", variant: "destructive" });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await createMutation.mutateAsync({
+        data: {
+          title: newTitle,
+          dateStart: newDateStart || null,
+          dateEnd: newDateEnd || null,
+          location: newLocation || null,
+          descriptionRaw: newDescription || null,
+          price: newPrice || null,
+          sourceUrl: newUrl || null,
+          sourceType: "manual",
+          status: "pending",
+        },
+      });
+      toast({ title: "Evento creato" });
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      setAddOpen(false);
+    } catch {
+      toast({ title: "Errore nella creazione", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleBulkAction = async (action: string) => {
     if (selectedIds.length === 0) return;
@@ -107,11 +211,147 @@ export default function Eventi() {
           <h1 className="text-3xl font-bold font-display text-foreground tracking-tight">Eventi</h1>
           <p className="text-muted-foreground mt-1">Gestisci, revisiona e approva gli eventi per la newsletter.</p>
         </div>
-        <Button className="shadow-md">
-          <Plus className="w-4 h-4 mr-2" />
-          Aggiungi Evento
-        </Button>
+        <div className="flex gap-3">
+          <Button variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => setConfirmDeletePast(true)}>
+            <Trash2 className="w-4 h-4 mr-2" />
+            Elimina Passati
+          </Button>
+          <Button className="shadow-md" onClick={openAdd}>
+            <Plus className="w-4 h-4 mr-2" />
+            Aggiungi Evento
+          </Button>
+        </div>
       </div>
+
+      <Dialog open={confirmDeletePast} onOpenChange={setConfirmDeletePast}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Eliminare gli eventi passati?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            Tutti gli eventi con data di fine (o data di inizio, se non c'è fine) precedente a oggi verranno eliminati definitivamente. L'azione non è reversibile.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeletePast(false)}>Annulla</Button>
+            <Button variant="destructive" onClick={handleDeletePast} disabled={deletePastMutation.isPending}>
+              {deletePastMutation.isPending ? "Eliminazione..." : "Elimina"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Nuovo Evento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="ev-title">Titolo *</Label>
+              <Input id="ev-title" value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Es. Mercato di Natale in Piazza" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="ev-start">Data inizio</Label>
+                <Input id="ev-start" type="date" value={newDateStart} onChange={e => setNewDateStart(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ev-end">Data fine</Label>
+                <Input id="ev-end" type="date" value={newDateEnd} onChange={e => setNewDateEnd(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ev-location">Luogo</Label>
+              <Input id="ev-location" value={newLocation} onChange={e => setNewLocation(e.target.value)} placeholder="Es. Piazza Repubblica, Varese" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ev-desc">Descrizione</Label>
+              <Textarea id="ev-desc" value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="Breve descrizione dell'evento..." rows={3} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="ev-price">Prezzo</Label>
+                <Input id="ev-price" value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="Es. Gratuito / €10" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ev-url">URL</Label>
+                <Input id="ev-url" type="url" value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://..." />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)} disabled={isSaving}>Annulla</Button>
+            <Button onClick={handleCreate} disabled={isSaving}>
+              {isSaving ? "Salvataggio..." : "Crea Evento"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingEvent} onOpenChange={open => { if (!open) setEditingEvent(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Modifica Evento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-title">Titolo *</Label>
+              <Input id="edit-title" value={editForm.title ?? ""} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-start">Data inizio</Label>
+                <Input id="edit-start" type="date" value={editForm.dateStart ?? ""} onChange={e => setEditForm(f => ({ ...f, dateStart: e.target.value || null }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-end">Data fine</Label>
+                <Input id="edit-end" type="date" value={editForm.dateEnd ?? ""} onChange={e => setEditForm(f => ({ ...f, dateEnd: e.target.value || null }))} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-display">Data visualizzata</Label>
+              <Input id="edit-display" value={editForm.dateDisplay ?? ""} onChange={e => setEditForm(f => ({ ...f, dateDisplay: e.target.value || null }))} placeholder="Es. 5–7 aprile 2025" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-location">Luogo</Label>
+              <Input id="edit-location" value={editForm.location ?? ""} onChange={e => setEditForm(f => ({ ...f, location: e.target.value || null }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-desc">Descrizione</Label>
+              <Textarea id="edit-desc" value={editForm.descriptionRaw ?? ""} onChange={e => setEditForm(f => ({ ...f, descriptionRaw: e.target.value || null }))} rows={3} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-price">Prezzo</Label>
+                <Input id="edit-price" value={editForm.price ?? ""} onChange={e => setEditForm(f => ({ ...f, price: e.target.value || null }))} placeholder="Es. Gratuito / €10" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-url">URL</Label>
+                <Input id="edit-url" type="url" value={editForm.sourceUrl ?? ""} onChange={e => setEditForm(f => ({ ...f, sourceUrl: e.target.value || null }))} placeholder="https://..." />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-status">Stato</Label>
+              <Select value={editForm.status ?? "pending"} onValueChange={v => setEditForm(f => ({ ...f, status: v }))}>
+                <SelectTrigger id="edit-status" className="bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">In attesa</SelectItem>
+                  <SelectItem value="approved">Approvato</SelectItem>
+                  <SelectItem value="rejected">Rifiutato</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingEvent(null)} disabled={isSaving}>Annulla</Button>
+            <Button onClick={handleUpdate} disabled={isSaving}>
+              {isSaving ? "Salvataggio..." : "Salva Modifiche"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="bg-card p-4 rounded-xl border border-border/50 mb-6 flex flex-col md:flex-row gap-4 shadow-sm">
         <div className="flex-1 relative">
@@ -200,7 +440,7 @@ export default function Eventi() {
                     </td>
                     <td className="p-4 text-muted-foreground text-xs whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <Clock className="w-3 h-3 shrink-0" />
+                        <Calendar className="w-3 h-3 shrink-0" />
                         {event.dateDisplay || (event.dateStart ? format(new Date(event.dateStart), 'dd MMM yyyy', { locale: it }) : 'Sconosciuta')}
                         {event.dateParseConfidence === 'low' && (
                           <AlertTriangle className="w-3 h-3 text-amber-500" title="Data parsing a bassa confidenza" />
@@ -225,8 +465,8 @@ export default function Eventi() {
                     </td>
                     <td className="p-4">{getStatusBadge(event.status)}</td>
                     <td className="p-4 text-right">
-                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
-                        <Eye className="w-4 h-4" />
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary" onClick={() => openEdit(event)}>
+                        <Pencil className="w-4 h-4" />
                       </Button>
                     </td>
                   </tr>

@@ -1,0 +1,157 @@
+import { useState } from "react";
+import { AppLayout } from "@/components/layout";
+import { useListNewsletters, useCreateNewsletter } from "@workspace/api-client-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { Plus, Edit2 } from "lucide-react";
+import { format } from "date-fns";
+import { it } from "date-fns/locale";
+
+export default function NewsletterList() {
+  const { data: newsletters, isLoading } = useListNewsletters();
+  const createMutation = useCreateNewsletter();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+
+  const handleCreate = async () => {
+    setIsCreating(true);
+    try {
+      const title = dateFrom && dateTo
+        ? `Newsletter ${format(new Date(dateFrom), 'dd MMM', { locale: it })} – ${format(new Date(dateTo), 'dd MMM yyyy', { locale: it })}`
+        : `Newsletter ${format(new Date(), 'dd MMMM yyyy', { locale: it })}`;
+
+      const created = await createMutation.mutateAsync({
+        data: {
+          title,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/newsletters"] });
+      setDialogOpen(false);
+      navigate(`/newsletter/${created.id}`);
+    } catch {
+      toast({ title: "Errore nella creazione", variant: "destructive" });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  return (
+    <AppLayout>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-bold font-display text-foreground tracking-tight">Newsletter</h1>
+          <p className="text-muted-foreground mt-1">Componi ed esporta le newsletter settimanali per Beehiiv.</p>
+        </div>
+        <Button onClick={() => setDialogOpen(true)} className="shadow-md">
+          <Plus className="w-4 h-4 mr-2" />
+          Nuova Newsletter
+        </Button>
+      </div>
+
+      {/* Create Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuova Newsletter</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Seleziona il periodo di riferimento per gli eventi da includere nella newsletter.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="dateFrom">Dal</Label>
+                <Input
+                  id="dateFrom"
+                  type="date"
+                  value={dateFrom}
+                  onChange={e => setDateFrom(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="dateTo">Al</Label>
+                <Input
+                  id="dateTo"
+                  type="date"
+                  value={dateTo}
+                  onChange={e => setDateTo(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isCreating}>
+              Annulla
+            </Button>
+            <Button onClick={handleCreate} disabled={isCreating}>
+              {isCreating ? "Creazione..." : "Crea Newsletter"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-muted/30 text-muted-foreground font-medium border-b border-border/50">
+              <tr>
+                <th className="p-4">Titolo</th>
+                <th className="p-4">Data Creazione</th>
+                <th className="p-4">Range Eventi</th>
+                <th className="p-4">Stato</th>
+                <th className="p-4 text-right">Azioni</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/30">
+              {isLoading ? (
+                <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">Caricamento...</td></tr>
+              ) : newsletters?.length === 0 ? (
+                <tr><td colSpan={5} className="p-12 text-center text-muted-foreground">Nessuna newsletter. Creane una nuova.</td></tr>
+              ) : (
+                newsletters?.map(nl => (
+                  <tr key={nl.id} className="hover:bg-muted/10 transition-colors">
+                    <td className="p-4 font-medium text-foreground">{nl.title}</td>
+                    <td className="p-4 text-muted-foreground">{format(new Date(nl.createdAt), 'dd MMM yyyy', { locale: it })}</td>
+                    <td className="p-4 text-muted-foreground text-xs">
+                      {nl.dateFrom ? format(new Date(nl.dateFrom), 'dd/MM') : '-'} ➔ {nl.dateTo ? format(new Date(nl.dateTo), 'dd/MM') : '-'}
+                    </td>
+                    <td className="p-4">
+                      {nl.status === 'draft' ? (
+                        <Badge variant="outline" className="bg-muted text-muted-foreground">Bozza</Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Esportata</Badge>
+                      )}
+                    </td>
+                    <td className="p-4 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-primary"
+                        onClick={() => navigate(`/newsletter/${nl.id}`)}
+                      >
+                        <Edit2 className="w-4 h-4 mr-2" /> Modifica
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </AppLayout>
+  );
+}

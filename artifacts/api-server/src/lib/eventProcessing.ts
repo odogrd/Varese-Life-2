@@ -6,6 +6,52 @@ import { logger } from "./logger";
 
 export { claudeFetchAndExtract };
 
+const PROVINCE_OF_VARESE_COMUNI = new Set([
+  "agra", "albizzate", "angera", "arcisate", "arsago seprio", "azzate", "azzio",
+  "barasso", "bardello con malgesso e bregano", "bedero valcuvia", "besano", "besnate",
+  "besozzo", "biandronno", "bisuschio", "bodio lomnago", "brebbia", "bregano", "brenta",
+  "brezzo di bedero", "brinzio", "brissago-valtravaglia", "brunello", "brusimpiano",
+  "buguggiate", "busto arsizio", "cadegliano-viconago", "cadrezzate con osmate", "cairate",
+  "cantello", "caravate", "cardano al campo", "carnago", "caronno pertusella",
+  "caronno varesino", "casale litta", "casalzuigno", "casciago", "casorate sempione",
+  "cassano magnago", "cassano valcuvia", "castellanza", "castello cabiaglio",
+  "castelseprio", "castelveccana", "castiglione olona", "castronno", "cavaria con premezzo",
+  "cazzago brabbia", "cislago", "cittiglio", "clivio", "cocquio-trevisago", "comabbio",
+  "comerio", "cremenaga", "crosio della valle", "cuasso al monte", "cugliate-fabiasco",
+  "cunardo", "curiglia con monteviasco", "cuveglio", "cuvio", "daverio", "dumenza",
+  "duno", "fagnano olona", "ferno", "ferrera di varese", "gallarate", "galliate lombardo",
+  "gavirate", "gazzada schianno", "gemonio", "gerenzano", "germignaga", "golasecca",
+  "gorla maggiore", "gorla minore", "gornate-olona", "grantola", "inarzo", "induno olona",
+  "ispra", "jerago con orago", "lavena ponte tresa", "laveno-mombello", "leggiuno",
+  "lonate ceppino", "lonate pozzolo", "lozza", "luino", "luvinate", "maccagno",
+  "malgesso", "malnate", "marchirolo", "marnate", "marzio", "masciago primo", "mercallo",
+  "mesenzana", "montegrino valtravaglia", "monvalle", "morazzone", "mornago",
+  "oggiona con santo stefano", "olgiate olona", "origgio", "orino",
+  "pino sulla sponda del lago maggiore", "porto ceresio", "porto valtravaglia",
+  "rancio valcuvia", "ranco", "saltrio", "samarate", "sangiano", "saronno",
+  "sesto calende", "solbiate arno", "solbiate olona", "somma lombardo", "sumirago",
+  "taino", "ternate", "tradate", "travedona-monate", "tronzano lago maggiore",
+  "uboldo", "valganna", "varano borghi", "varese", "vedano olona", "veddasca",
+  "venegono inferiore", "venegono superiore", "vergiate", "viggiù", "vizzola ticino",
+]);
+
+/**
+ * Returns true if the location is likely within the Province of Varese.
+ * If location is null/empty, returns true (assume province-scoped since sources are targeted).
+ * If location is specified but doesn't match any known comune, returns false.
+ */
+export function isLocationInProvinceOfVarese(location: string | null | undefined): boolean {
+  if (!location) return true;
+  const loc = location.toLowerCase();
+  // Generic province references
+  if (loc.includes("varese") || loc.includes("provincia di va")) return true;
+  // Check each comune name
+  for (const comune of PROVINCE_OF_VARESE_COMUNI) {
+    if (loc.includes(comune)) return true;
+  }
+  return false;
+}
+
 export interface RawEvent {
   title?: string;
   date?: string;
@@ -113,6 +159,14 @@ function parseItalianDate(dateStr: string): { dateStart: Date | null; dateEnd: D
   return { dateStart: null, dateEnd: null, confidence: "low" };
 }
 
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function trimDateEndIfMultiWeek(dateStart: Date | null, dateEnd: Date | null): Date | null {
+  if (!dateStart || !dateEnd) return dateEnd;
+  if (dateEnd.getTime() - dateStart.getTime() > ONE_WEEK_MS) return null;
+  return dateEnd;
+}
+
 export function generateDateDisplay(dateStart: Date | null, dateEnd: Date | null): string {
   if (!dateStart) return "";
 
@@ -168,6 +222,20 @@ export async function processRawEvents(
         if (parsedEnd.dateStart) dateEnd = parsedEnd.dateStart;
       }
 
+      dateEnd = trimDateEndIfMultiWeek(dateStart, dateEnd);
+
+      if (!isLocationInProvinceOfVarese(raw.location)) {
+        await db.insert(errorLogsTable).values({
+          errorType: "outside_province",
+          sourceId,
+          message: `Evento escluso: luogo fuori dalla Provincia di Varese: "${raw.location}" (${title})`,
+          context: { raw },
+          resolved: false,
+        });
+        errors++;
+        continue;
+      }
+
       if (!dateStart) {
         await db.insert(errorLogsTable).values({
           errorType: "no_date",
@@ -179,6 +247,12 @@ export async function processRawEvents(
         errors++;
         continue;
       }
+
+      // Skip events that are entirely in the past
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const eventEnd = dateEnd ?? dateStart;
+      if (eventEnd < today) continue;
 
       const descriptionRaw = raw.description || raw.description_raw || "";
       const dateDisplay = generateDateDisplay(dateStart, dateEnd);

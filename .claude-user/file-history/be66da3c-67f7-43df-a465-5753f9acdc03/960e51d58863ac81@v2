@@ -1,0 +1,256 @@
+import { useState } from "react";
+import { AppLayout } from "@/components/layout";
+import { useListUsers, useGetMe, useCreateUser, useUpdateUser, useDeleteUser } from "@workspace/api-client-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/components/ui/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { ShieldAlert, UserIcon, Plus, Pencil, Trash2 } from "lucide-react";
+import { format } from "date-fns";
+import { it } from "date-fns/locale";
+import type { User } from "@workspace/api-zod";
+
+type DialogMode = { type: "create" } | { type: "edit"; user: User };
+
+export default function Utenti() {
+  const { data: users, isLoading } = useListUsers();
+  const { data: me } = useGetMe();
+  const createMutation = useCreateUser();
+  const updateMutation = useUpdateUser();
+  const deleteMutation = useDeleteUser();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const [dialog, setDialog] = useState<DialogMode | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+
+  // Form state
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState("editor");
+  const [active, setActive] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const openCreate = () => {
+    setEmail(""); setPassword(""); setRole("editor"); setActive(true);
+    setDialog({ type: "create" });
+  };
+
+  const openEdit = (user: User) => {
+    setEmail(user.email); setPassword(""); setRole(user.role); setActive(user.active);
+    setDialog({ type: "edit", user });
+  };
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+
+  const handleSave = async () => {
+    if (!email.trim()) {
+      toast({ title: "Email obbligatoria", variant: "destructive" });
+      return;
+    }
+    if (dialog?.type === "create" && !password.trim()) {
+      toast({ title: "Password obbligatoria", variant: "destructive" });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      if (dialog?.type === "create") {
+        await createMutation.mutateAsync({ data: { email, password, role } });
+        toast({ title: "Utente creato" });
+      } else if (dialog?.type === "edit") {
+        await updateMutation.mutateAsync({ id: dialog.user.id, data: { email, role, active } });
+        toast({ title: "Utente aggiornato" });
+      }
+      invalidate();
+      setDialog(null);
+    } catch {
+      toast({ title: "Errore nel salvataggio", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteMutation.mutateAsync({ id: deleteTarget.id });
+      toast({ title: "Utente eliminato" });
+      invalidate();
+    } catch {
+      toast({ title: "Errore nell'eliminazione", variant: "destructive" });
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
+
+  if (!me?.isSuperadmin) {
+    return (
+      <AppLayout>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <ShieldAlert className="w-16 h-16 text-muted-foreground/30 mb-4" />
+          <h2 className="text-xl font-semibold text-foreground">Accesso Negato</h2>
+          <p className="text-muted-foreground mt-2">Solo il superadmin può gestire gli utenti.</p>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  return (
+    <AppLayout>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-bold font-display text-foreground tracking-tight">Gestione Utenti</h1>
+          <p className="text-muted-foreground mt-1">Aggiungi e rimuovi editor o admin dal sistema.</p>
+        </div>
+        <Button onClick={openCreate} className="shadow-md">
+          <Plus className="w-4 h-4 mr-2" />
+          Aggiungi Utente
+        </Button>
+      </div>
+
+      <Card className="border-border/50 shadow-sm overflow-hidden">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-muted/30 text-muted-foreground font-medium border-b border-border/50">
+            <tr>
+              <th className="p-4">Utente</th>
+              <th className="p-4">Ruolo</th>
+              <th className="p-4">Stato</th>
+              <th className="p-4">Ultimo Accesso</th>
+              <th className="p-4 text-right">Azioni</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/30">
+            {isLoading ? (
+              <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">Caricamento...</td></tr>
+            ) : (
+              users?.map(u => (
+                <tr key={u.id} className="hover:bg-muted/10">
+                  <td className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                        {u.isSuperadmin ? <ShieldAlert className="w-4 h-4" /> : <UserIcon className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <div className="font-medium">{u.email}</div>
+                        {u.isSuperadmin && <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Superadmin</div>}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <Badge variant="outline" className="capitalize">{u.role}</Badge>
+                  </td>
+                  <td className="p-4">
+                    {u.active
+                      ? <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none">Attivo</Badge>
+                      : <Badge variant="secondary">Inattivo</Badge>
+                    }
+                  </td>
+                  <td className="p-4 text-muted-foreground">
+                    {u.lastLoginAt ? format(new Date(u.lastLoginAt), 'dd MMM yyyy', { locale: it }) : 'Mai'}
+                  </td>
+                  <td className="p-4 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary" onClick={() => openEdit(u)}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      {!u.isSuperadmin && (
+                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" onClick={() => setDeleteTarget(u)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </Card>
+
+      {/* Create / Edit Dialog */}
+      <Dialog open={dialog !== null} onOpenChange={open => !open && setDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{dialog?.type === "create" ? "Nuovo Utente" : "Modifica Utente"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="u-email">Email</Label>
+              <Input
+                id="u-email"
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="utente@esempio.it"
+              />
+            </div>
+            {dialog?.type === "create" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="u-password">Password</Label>
+                <Input
+                  id="u-password"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Minimo 8 caratteri"
+                />
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="u-role">Ruolo</Label>
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger id="u-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="editor">Editor</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {dialog?.type === "edit" && (
+              <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
+                <div>
+                  <Label htmlFor="u-active" className="text-sm font-medium">Account attivo</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">L'utente può accedere al sistema.</p>
+                </div>
+                <Switch id="u-active" checked={active} onCheckedChange={setActive} />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialog(null)} disabled={isSaving}>Annulla</Button>
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? "Salvataggio..." : dialog?.type === "create" ? "Crea Utente" : "Salva Modifiche"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteTarget !== null} onOpenChange={open => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminare utente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Stai per eliminare <strong>{deleteTarget?.email}</strong>. Questa azione non può essere annullata.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Elimina
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </AppLayout>
+  );
+}

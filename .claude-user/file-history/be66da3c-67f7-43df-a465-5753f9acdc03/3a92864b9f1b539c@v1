@@ -1,0 +1,51 @@
+import { Router } from "express";
+import bcrypt from "bcrypt";
+import { db } from "@workspace/db";
+import { usersTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
+import { requireAuth, requireSuperadmin } from "../middlewares/auth";
+
+const router = Router();
+router.use(requireAuth, requireSuperadmin);
+
+router.get("/users", async (_req, res) => {
+  const users = await db.select({
+    id: usersTable.id, email: usersTable.email, role: usersTable.role,
+    isSuperadmin: usersTable.isSuperadmin, active: usersTable.active,
+    lastLoginAt: usersTable.lastLoginAt, createdAt: usersTable.createdAt
+  }).from(usersTable).orderBy(usersTable.createdAt);
+  res.json(users);
+});
+
+router.post("/users", async (req, res) => {
+  const { email, password, role = "editor" } = req.body;
+  if (!email || !password) return res.status(400).json({ error: "Email e password richiesti" });
+  const hash = await bcrypt.hash(password, 12);
+  const [user] = await db.insert(usersTable).values({ email, passwordHash: hash, role }).returning({
+    id: usersTable.id, email: usersTable.email, role: usersTable.role,
+    isSuperadmin: usersTable.isSuperadmin, active: usersTable.active,
+    lastLoginAt: usersTable.lastLoginAt, createdAt: usersTable.createdAt
+  });
+  res.status(201).json(user);
+});
+
+router.put("/users/:id", async (req, res) => {
+  const { email, role, active } = req.body;
+  const [user] = await db.update(usersTable).set({ email, role, active })
+    .where(eq(usersTable.id, parseInt(req.params.id))).returning({
+      id: usersTable.id, email: usersTable.email, role: usersTable.role,
+      isSuperadmin: usersTable.isSuperadmin, active: usersTable.active,
+      lastLoginAt: usersTable.lastLoginAt, createdAt: usersTable.createdAt
+    });
+  res.json(user);
+});
+
+router.delete("/users/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (user?.isSuperadmin) return res.status(403).json({ error: "Non puoi eliminare il superadmin" });
+  await db.delete(usersTable).where(eq(usersTable.id, id));
+  res.json({ message: "Utente eliminato" });
+});
+
+export default router;

@@ -75,7 +75,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <Sidebar className="border-r border-border/50">
           <SidebarHeader className="p-4 border-b border-border/50">
             <div className="flex items-center gap-3">
-              <img src={`${import.meta.env.BASE_URL}images/logo-icon.png`} alt="Varese Life Logo" className="w-8 h-8 rounded-md shadow-sm" />
+              <img src="https://media.beehiiv.com/cdn-cgi/image/format=auto,onerror=redirect/uploads/publication/logo/86d392b4-bd06-4860-a4d1-bd8bc1014080/Varese_Life.png" alt="Varese Life Logo" className="h-8 w-auto" />
               <div className="font-display font-bold text-lg text-foreground tracking-tight">Varese Life</div>
             </div>
           </SidebarHeader>

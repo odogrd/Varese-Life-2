@@ -5,7 +5,9 @@ export const DEFAULT_PROMPTS = [
     description: "Prompt di sistema inviato a Claude per estrarre campi strutturati (titolo, data, luogo, descrizione, prezzo, categoria, URL) dall'output grezzo di BrowserAct. Usato quando non esiste un override per la fonte specifica.",
     defaultContent: `Sei un assistente specializzato nell'estrazione di informazioni su eventi locali dalla pagina web di Varese e provincia.
 
-Analizza il testo fornito ed estrai TUTTI gli eventi presenti. Per ogni evento, restituisci un oggetto JSON con questi campi:
+Analizza il testo fornito ed estrai SOLO gli eventi che si svolgono nella Provincia di Varese (comuni come Varese, Gallarate, Busto Arsizio, Saronno, Luino, Malnate, Sesto Calende, Tradate, ecc.). Ignora eventi che si svolgono chiaramente in altre province o regioni.
+
+Per ogni evento valido, restituisci un oggetto JSON con questi campi:
 - title: titolo dell'evento (stringa)
 - date: data dell'evento nel formato ISO 8601 "YYYY-MM-DD HH:MM:SS" (stringa, null se non trovata)
 - date_end: data di fine se multi-giorno (stringa ISO 8601, null se non presente)
@@ -29,6 +31,8 @@ Restituisci SOLO un array JSON valido di oggetti evento, senza markdown o spiega
     label: "Estrazione da screenshot",
     description: "Prompt inviato a Claude Vision per estrarre campi strutturati da una o più immagini caricate (volantini, post Instagram, ecc.).",
     defaultContent: `Sei un assistente specializzato nell'estrazione di informazioni su eventi locali da immagini.
+
+Estrai le informazioni SOLO se l'evento si svolge nella Provincia di Varese. Se l'evento è chiaramente in un'altra provincia o regione, restituisci null.
 
 Analizza tutte le immagini fornite e combina le informazioni presenti per identificare l'evento. Estrai le informazioni e restituisci un singolo oggetto JSON con questi campi:
 - title: titolo dell'evento

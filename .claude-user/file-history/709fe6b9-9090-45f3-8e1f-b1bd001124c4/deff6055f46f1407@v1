@@ -1,0 +1,365 @@
+import { useState } from "react";
+import { AppLayout } from "@/components/layout";
+import { useListSources, useCreateSource, useUpdateSource, useDeleteSource, useScrapeSource, useScrapeAll } from "@workspace/api-client-react";
+import type { SourceWithUrls, CreateSourceRequest, UpdateSourceRequest } from "@workspace/api-client-react/src/generated/api.schemas";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Search, RefreshCw, Pencil, Trash2, Globe, ChevronDown, ChevronRight, AlertTriangle, Link as LinkIcon } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
+import { it } from "date-fns/locale";
+
+export default function Fonti() {
+  const { data: sources, isLoading } = useListSources();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const scrapeAllMutation = useScrapeAll();
+  
+  const [searchTerm, setSearchTerm] = useState("");
+  const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
+  
+  // Modals state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingSource, setEditingSource] = useState<SourceWithUrls | null>(null);
+
+  const toggleRow = (id: number) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleScrapeAll = async () => {
+    try {
+      await scrapeAllMutation.mutateAsync();
+      toast({ title: "Scraping avviato", description: "Richiesta inviata a tutte le fonti." });
+    } catch (e) {
+      toast({ title: "Errore", variant: "destructive", description: "Impossibile avviare lo scraping globale." });
+    }
+  };
+
+  const filteredSources = sources?.filter(s => 
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.urls.some(u => u.url.toLowerCase().includes(searchTerm.toLowerCase()))
+  ) || [];
+
+  return (
+    <AppLayout>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-bold font-display text-foreground tracking-tight">Fonti</h1>
+          <p className="text-muted-foreground mt-1">Gestisci i siti web e gli URL da cui estrarre gli eventi.</p>
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={handleScrapeAll} disabled={scrapeAllMutation.isPending} className="bg-background">
+            <RefreshCw className={`w-4 h-4 mr-2 ${scrapeAllMutation.isPending ? 'animate-spin' : ''}`} />
+            Scrapa Tutte
+          </Button>
+          <Button onClick={() => { setEditingSource(null); setIsEditModalOpen(true); }} className="shadow-md">
+            <Plus className="w-4 h-4 mr-2" />
+            Aggiungi Fonte
+          </Button>
+        </div>
+      </div>
+
+      <div className="mb-6 flex relative">
+        <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input 
+          placeholder="Cerca per nome o URL..." 
+          className="pl-10 max-w-md bg-background"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-4">
+          {[1, 2, 3].map(i => <div key={i} className="h-16 bg-muted animate-pulse rounded-xl"></div>)}
+        </div>
+      ) : filteredSources.length === 0 ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <Globe className="w-12 h-12 text-muted-foreground/50 mb-4" />
+            <h3 className="text-lg font-medium text-foreground">Nessuna fonte trovata</h3>
+            <p className="text-muted-foreground text-sm max-w-sm mt-1 mb-4">Aggiungi la tua prima fonte per iniziare ad estrarre eventi automaticamente.</p>
+            <Button onClick={() => { setEditingSource(null); setIsEditModalOpen(true); }}>Aggiungi Fonte</Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="bg-card rounded-xl shadow-sm border border-border/50 overflow-hidden">
+          <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 p-4 bg-muted/30 border-b border-border/50 text-sm font-medium text-muted-foreground">
+            <div className="w-8"></div>
+            <div>Nome</div>
+            <div className="w-32 hidden sm:block">Scraper</div>
+            <div className="w-48 hidden md:block">Ultimo Scrape</div>
+            <div className="w-24 text-right">Stato</div>
+          </div>
+          
+          <div className="divide-y divide-border/30">
+            {filteredSources.map((source) => (
+              <SourceRow 
+                key={source.id} 
+                source={source} 
+                isExpanded={!!expandedRows[source.id]} 
+                onToggle={() => toggleRow(source.id)} 
+                onEdit={() => { setEditingSource(source); setIsEditModalOpen(true); }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isEditModalOpen && (
+        <SourceModal 
+          source={editingSource} 
+          isOpen={isEditModalOpen} 
+          onClose={() => setIsEditModalOpen(false)} 
+        />
+      )}
+    </AppLayout>
+  );
+}
+
+function SourceRow({ source, isExpanded, onToggle, onEdit }: { source: SourceWithUrls, isExpanded: boolean, onToggle: () => void, onEdit: () => void }) {
+  const scrapeMutation = useScrapeSource();
+  const { toast } = useToast();
+
+  const handleScrape = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await scrapeMutation.mutateAsync({ id: source.id });
+      toast({ title: "Scraping avviato", description: `Avviata estrazione per ${source.name}` });
+    } catch (err) {
+      toast({ title: "Errore", variant: "destructive", description: "Impossibile avviare lo scraping" });
+    }
+  };
+
+  return (
+    <div className="group">
+      <div 
+        className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 p-4 items-center hover:bg-muted/10 transition-colors cursor-pointer"
+        onClick={onToggle}
+      >
+        <div className="w-8 flex items-center justify-center text-muted-foreground">
+          {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+        </div>
+        <div className="min-w-0">
+          <div className="font-medium text-foreground truncate flex items-center gap-2">
+            {source.name}
+            <Badge variant="secondary" className="text-xs bg-muted text-muted-foreground font-normal rounded-full px-2">
+              {source.urls.length} URL
+            </Badge>
+          </div>
+          {source.preferredScraper === 'browseract' && !source.browseractWorkflowId && (
+            <div className="text-[10px] text-amber-500 mt-1 flex items-center gap-1 font-medium">
+              <AlertTriangle className="w-3 h-3" /> Sistema di backup (Nessun ID workflow)
+            </div>
+          )}
+        </div>
+        <div className="w-32 hidden sm:flex items-center text-sm">
+          {source.preferredScraper === 'browseract' ? (
+            <Badge variant="outline" className="text-blue-600 bg-blue-50 border-blue-200">BrowserAct</Badge>
+          ) : (
+            <Badge variant="outline" className="text-purple-600 bg-purple-50 border-purple-200">Claude</Badge>
+          )}
+        </div>
+        <div className="w-48 hidden md:block text-sm text-muted-foreground">
+          {source.lastScrapedAt ? format(new Date(source.lastScrapedAt), 'dd MMM, HH:mm', { locale: it }) : '-'}
+        </div>
+        <div className="w-24 flex items-center justify-end gap-2">
+          {!source.active && <Badge variant="secondary" className="bg-muted">Inattivo</Badge>}
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={(e) => { e.stopPropagation(); onEdit(); }}>
+            <Pencil className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+      
+      {isExpanded && (
+        <div className="bg-muted/10 px-4 py-4 border-t border-border/30 pl-[4rem]">
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="text-sm font-medium text-foreground">URL configurati</h4>
+            <Button size="sm" variant="outline" onClick={handleScrape} disabled={scrapeMutation.isPending}>
+              <RefreshCw className={`w-3 h-3 mr-2 ${scrapeMutation.isPending ? 'animate-spin' : ''}`} />
+              Scrapa Fonte Ora
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {source.urls.map((url) => (
+              <div key={url.id} className="flex items-center gap-3 p-3 rounded-lg bg-background border border-border/50 text-sm">
+                <LinkIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  {url.label && <div className="font-medium text-xs mb-0.5">{url.label}</div>}
+                  <a href={url.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate block">
+                    {url.url}
+                  </a>
+                </div>
+                {!url.active && <Badge variant="secondary" className="text-[10px]">Inattivo</Badge>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SourceModal({ source, isOpen, onClose }: { source: SourceWithUrls | null, isOpen: boolean, onClose: () => void }) {
+  const createMutation = useCreateSource();
+  const updateMutation = useUpdateSource();
+  const deleteMutation = useDeleteSource();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const [formData, setFormData] = useState({
+    name: source?.name || "",
+    preferredScraper: source?.preferredScraper || "browseract",
+    browseractWorkflowId: source?.browseractWorkflowId || "",
+    active: source !== null ? source.active : true,
+    urls: source?.urls.map(u => ({ id: u.id, url: u.url, label: u.label || "", active: u.active })) || [{ url: "", label: "", active: true }]
+  });
+
+  const handleSave = async () => {
+    if (!formData.name) return toast({ title: "Nome mancante", variant: "destructive" });
+    if (!formData.urls[0].url) return toast({ title: "Inserisci almeno un URL", variant: "destructive" });
+
+    try {
+      const payload = {
+        name: formData.name,
+        preferredScraper: formData.preferredScraper,
+        browseractWorkflowId: formData.browseractWorkflowId || null,
+        active: formData.active,
+        urls: formData.urls.filter(u => u.url.trim() !== "").map(u => ({
+          ...(u.id ? { id: u.id } : {}),
+          url: u.url,
+          label: u.label || null,
+          active: u.active
+        }))
+      };
+
+      if (source) {
+        await updateMutation.mutateAsync({ id: source.id, data: payload as UpdateSourceRequest });
+        toast({ title: "Fonte aggiornata" });
+      } else {
+        await createMutation.mutateAsync({ data: payload as CreateSourceRequest });
+        toast({ title: "Fonte creata" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/sources"] });
+      onClose();
+    } catch (e) {
+      toast({ title: "Errore durante il salvataggio", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!source) return;
+    if (confirm("Sei sicuro di voler eliminare questa fonte? Tutti gli eventi ad essa collegati rimarranno.")) {
+      try {
+        await deleteMutation.mutateAsync({ id: source.id });
+        toast({ title: "Fonte eliminata" });
+        queryClient.invalidateQueries({ queryKey: ["/api/sources"] });
+        onClose();
+      } catch (e) {
+        toast({ title: "Errore", variant: "destructive" });
+      }
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{source ? "Modifica Fonte" : "Aggiungi Fonte"}</DialogTitle>
+        </DialogHeader>
+        
+        <div className="grid gap-6 py-4">
+          <div className="grid gap-2">
+            <Label>Nome Fonte</Label>
+            <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Es. Comune di Varese" />
+          </div>
+          
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Motore preferito</Label>
+              <Select value={formData.preferredScraper} onValueChange={(v) => setFormData({...formData, preferredScraper: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="browseract">BrowserAct (Scraping avanzato)</SelectItem>
+                  <SelectItem value="claude_fallback">Claude (Scraping base)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>BrowserAct Workflow ID (opzionale)</Label>
+              <Input value={formData.browseractWorkflowId} onChange={e => setFormData({...formData, browseractWorkflowId: e.target.value})} placeholder="ID del workflow" disabled={formData.preferredScraper === 'claude_fallback'} />
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Switch checked={formData.active} onCheckedChange={(c) => setFormData({...formData, active: c})} />
+            <Label>Fonte attiva</Label>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <Label className="text-base">URLs da scansionare</Label>
+              <Button type="button" variant="outline" size="sm" onClick={() => setFormData({...formData, urls: [...formData.urls, { url: "", label: "", active: true }]})}>
+                <Plus className="w-3 h-3 mr-2" /> Aggiungi URL
+              </Button>
+            </div>
+            
+            <div className="space-y-3">
+              {formData.urls.map((url, i) => (
+                <div key={i} className="flex gap-2 items-start bg-muted/20 p-3 rounded-lg border border-border">
+                  <div className="grid gap-3 flex-1">
+                    <Input placeholder="https://..." value={url.url} onChange={e => {
+                      const newUrls = [...formData.urls];
+                      newUrls[i].url = e.target.value;
+                      setFormData({...formData, urls: newUrls});
+                    }} />
+                    <div className="flex gap-2 items-center">
+                      <Input placeholder="Etichetta (es. Pagina eventi)" value={url.label} className="h-8 text-sm" onChange={e => {
+                        const newUrls = [...formData.urls];
+                        newUrls[i].label = e.target.value;
+                        setFormData({...formData, urls: newUrls});
+                      }} />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Switch checked={url.active} onCheckedChange={(c) => {
+                          const newUrls = [...formData.urls];
+                          newUrls[i].active = c;
+                          setFormData({...formData, urls: newUrls});
+                        }} />
+                        <span className="text-xs text-muted-foreground w-12">{url.active ? 'Attivo' : 'Spento'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {formData.urls.length > 1 && (
+                    <Button variant="ghost" size="icon" className="text-destructive shrink-0" onClick={() => {
+                      const newUrls = formData.urls.filter((_, index) => index !== i);
+                      setFormData({...formData, urls: newUrls});
+                    }}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="flex items-center sm:justify-between w-full">
+          {source ? (
+            <Button variant="destructive" onClick={handleDelete} className="shadow-sm">Elimina</Button>
+          ) : <div></div>}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>Annulla</Button>
+            <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>Salva</Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

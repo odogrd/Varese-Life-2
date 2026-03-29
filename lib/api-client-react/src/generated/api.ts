@@ -1666,6 +1666,41 @@ export type DeleteEventMutationResult = NonNullable<
 export type DeleteEventMutationError = ErrorType<unknown>;
 
 /**
+ * @summary Delete all past events
+ */
+export const deletePastEvents = async (
+  options?: RequestInit,
+): Promise<MessageResponse & { deleted: number }> => {
+  return customFetch<MessageResponse & { deleted: number }>(`/api/events/past`, {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const useDeletePastEvents = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePastEvents>>,
+    TError,
+    void,
+    TContext
+  >;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deletePastEvents>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation({
+    mutationKey: ["deletePastEvents"],
+    mutationFn: () => deletePastEvents(),
+    ...options?.mutation,
+  });
+};
+
+/**
  * @summary Delete event
  */
 export const useDeleteEvent = <
