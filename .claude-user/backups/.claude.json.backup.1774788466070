@@ -412,7 +412,7 @@
       "enabledMcpjsonServers": [],
       "disabledMcpjsonServers": [],
       "hasTrustDialogAccepted": true,
-      "projectOnboardingSeenCount": 10,
+      "projectOnboardingSeenCount": 15,
       "hasClaudeMdExternalIncludesApproved": false,
       "hasClaudeMdExternalIncludesWarningShown": false,
       "exampleFiles": [
@@ -426,7 +426,7 @@
     }
   },
   "voiceNoticeSeenCount": 3,
-  "lastReleaseNotesSeen": "2.1.87",
+  "lastReleaseNotesSeen": "2.1.84",
   "clientDataCache": {},
   "additionalModelOptionsCache": [],
   "groveConfigCache": {

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { eventsTable, sourcesTable, settingsTable } from "@workspace/db/schema";
-import { eq, and, like, gte, lte, lt, inArray, sql, desc } from "drizzle-orm";
+import { eq, and, or, isNull, isNotNull, like, gte, lte, lt, inArray, sql, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { claudeRewrite, claudeExtractFromText, claudeExtractFromImages, claudeFetchAndExtract } from "../lib/claude";
 import { triggerBrowserActWorkflow } from "../lib/browseract";
@@ -87,9 +87,14 @@ router.delete("/events/past", async (_req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    // Keep only events yet to start — delete anything with dateStart before today
+    // Past = event has ended (dateEnd < today) OR has no end but started before today (dateStart < today)
     const result = await db.delete(eventsTable)
-      .where(lt(eventsTable.dateStart, today))
+      .where(
+        or(
+          and(isNotNull(eventsTable.dateEnd), lt(eventsTable.dateEnd, today)),
+          and(isNull(eventsTable.dateEnd), lt(eventsTable.dateStart, today)),
+        )
+      )
       .returning({ id: eventsTable.id });
     res.json({ message: `${result.length} eventi passati eliminati`, deleted: result.length });
   } catch (err) {

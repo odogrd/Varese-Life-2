@@ -248,11 +248,10 @@ export async function processRawEvents(
         continue;
       }
 
-      // Skip events that are entirely in the past
+      // Skip events that have already started (include only future events)
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const eventEnd = dateEnd ?? dateStart;
-      if (eventEnd < today) continue;
+      if (dateStart < today) continue;
 
       const descriptionRaw = raw.description || raw.description_raw || "";
       const dateDisplay = generateDateDisplay(dateStart, dateEnd);
